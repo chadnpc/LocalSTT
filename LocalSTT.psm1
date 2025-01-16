@@ -60,9 +60,9 @@ class LocalSTT {
     port             = 65432
     host             = "127.0.0.1"
     amplifyRate      = 1.0
-    outFile          = "$(Get-Date -Format 'yyyyMMddHHmmss')_output.wav"
+    outFile          = [IO.Path]::Combine((Get-Location).Path, "$(Get-Date -Format 'yyyyMMddHHmmss')_output.wav")
     workingDirectory = (Get-Location).Path
-    backgroundScript = [IO.Path]::Combine($PSScriptRoot, "Private", "stt.py")
+    backgroundScript = [IO.Path]::Combine((Get-Module LocalSTT).ModuleBase, "Private", "stt.py")
   }
   LocalSTT() {}
 
