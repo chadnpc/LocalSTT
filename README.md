@@ -1,6 +1,6 @@
 ﻿# [LocalSTT](https://www.powershellgallery.com/packages/LocalSTT)
 
-🔥 Blazingly fast PowerShell thingy that stonks up your terminal game.
+A speech to text without leaving your terminal.
 
 ## Usage
 
@@ -12,7 +12,8 @@ then
 
 ```PowerShell
 Import-Module LocalSTT
-# do stuff here.
+Record-Audio # for now all this does is record audio and save it to the current directory
+# wip: Transcribe-Audio cmdlet. will transcribe the audio file to text
 ```
 
 ## License
