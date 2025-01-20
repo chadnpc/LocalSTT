@@ -2,9 +2,9 @@
 using namespace System.IO
 using namespace System.Net
 using namespace System.Net.Sockets
+using namespace System.Management.Automation
 
-#Requires -RunAsAdministrator
-#Requires -Modules cliHelper.core
+#Requires -Modules cliHelper.core, pipEnv
 #Requires -Psedition Core
 
 #region    Classes
@@ -56,14 +56,7 @@ class AudioRecorder {
 #   https://pyaudio.readthedocs.io/en/stable/
 class LocalSTT {
   static [AudioRecorder]$recorder
-  static [PsRecord]$config = @{
-    port             = 65432
-    host             = "127.0.0.1"
-    amplifyRate      = 1.0
-    outFile          = [IO.Path]::Combine((Get-Location).Path, "$(Get-Date -Format 'yyyyMMddHHmmss')_output.wav")
-    workingDirectory = (Get-Location).Path
-    backgroundScript = [IO.Path]::Combine((Get-Module LocalSTT).ModuleBase, "Private", "stt.py")
-  }
+  static $config = [LocalSTT]::LoadConfig()
   LocalSTT() {}
 
   static [IO.Fileinfo] RecordAudio() {
@@ -106,6 +99,22 @@ class LocalSTT {
       [LocalSTT]::recorder.Stop($pythonProcess.Id)
     }
     return $outFile
+  }
+  static [PsObject] LoadConfig() {
+    return [LocalSTT]::LoadConfig((Resolve-Path .).Path)
+  }
+  static [PsObject] LoadConfig([string]$current_path) {
+    $module_path = (Get-Module LocalSTT -ListAvailable -Verbose:$false).ModuleBase
+    $c = @{
+      port             = 65432
+      host             = "127.0.0.1"
+      amplifyRate      = "1.0"
+      workingDirectory = $current_path
+      backgroundScript = [IO.Path]::Combine($module_path, "Private", "stt.py")
+      outFile          = [IO.Path]::Combine($current_path, "$(Get-Date -Format 'yyyyMMddHHmmss')_output.wav")
+    } -as "PsRecord"
+    $c.PsObject.Properties.Add([PSScriptproperty]::New("env", { return [LocalSTT]::config.workingDirectory | New-PipEnv }, { throw [SetValueException]::new("env is read-only") }))
+    return $c
   }
 }
 
