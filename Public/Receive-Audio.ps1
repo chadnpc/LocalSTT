@@ -7,7 +7,7 @@ function Receive-Audio {
   #   https://github.com/alainQtec/LocalSTT/blob/main/Public/Receive-Audio.ps1
   # .EXAMPLE
   #   Record-Audio
-  #   sAVEs audio to the current directory. (Works fine)
+  #   Saves audio to the current directory. (Works fine)
   # .EXAMPLE
   #   Record-Audio -o ~/output.wav
   #   Will record audio and save it to the specified path (WIP)
