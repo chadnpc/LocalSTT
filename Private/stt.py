@@ -54,7 +54,7 @@ def select_best_audio_device(devices):
             print("No suitable audio input device found.")
             return None
 
-        print(f"Audio input device n༚: {best_device_index} - ({device_name})")
+        print(f"Using audio input device n༚: {best_device_index} - ({device_name})")
         return best_device_index
 
     except Exception as e:

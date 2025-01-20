@@ -9,23 +9,27 @@ using namespace System.Management.Automation
 
 #region    Classes
 class AudioRecorder {
-  [IO.FileInfo]$outFile
-  hidden [TcpClient]$client
+  [Socket]$server
+  [TcpClient]$client
+  [FileInfo]$outFile
+  hidden [Stream]$stream
   hidden [TcpListener]$listener
-  hidden [MemoryStream]$stream
 
-  AudioRecorder([TcpListener]$listener, [IO.FileInfo]$outFile) {
+  AudioRecorder([TcpListener]$listener, [FileInfo]$outFile) {
     $this.listener = $listener
     $this.outFile = $outFile
   }
-  [MemoryStream] Start() {
+  [Stream] Start() {
+    $this.listener.Start()
+    $this.server = ([ref]$this.listener.Server).Value
     return $this.Start($this.listener.AcceptTcpClient())
   }
-  [MemoryStream] Start([TcpClient]$client) {
+  [Stream] Start([TcpClient]$client) {
     $this.client = $client
-    Write-Host "┆" -f Green
+    Write-Console "• " -f SlateBlue -NoNewLine; Write-Console "OutFile: " -f LightGoldenrodYellow -NoNewLine; Write-Console "'$([LocalSTT]::recorder.outFile)'" -f LimeGreen; Write-Console "┆" -f LimeGreen
     $this.stream = $client.GetStream()
-    Write-Host "STT server is recording. Press Ctrl+C to stop." -f Blue
+    Write-Console "• " -f SlateBlue -NoNewLine; Write-Console "Started recording. Press Ctrl+C to stop." -f LightGoldenrodYellow
+    [LocalSTT]::status.IsRecording = $true
     return $this.stream
   }
   [void] Stop() {
@@ -37,10 +41,8 @@ class AudioRecorder {
   [void] Stop([TcpListener]$listener, [int]$ProcessId) {
     $this.stream.Close()
     $this.client.Close(); $listener.Stop()
-    if ($ProcessId -gt 0) {
-      Stop-Process -Id $ProcessId -Force
-      if ($this.outFile.Exists) { Write-Host "Audio outFile: $($this.outFile)" -f Green }
-    }
+    if ($ProcessId -gt 0) { Stop-Process -Id $ProcessId -Force }
+    [LocalSTT]::status.IsRecording = $false
   }
 }
 
@@ -56,64 +58,78 @@ class AudioRecorder {
 #   https://pyaudio.readthedocs.io/en/stable/
 class LocalSTT {
   static [AudioRecorder]$recorder
-  static $config = [LocalSTT]::LoadConfig()
+  static [hashtable]$status = [hashtable]::Synchronized(@{
+      HasConfig   = [LocalSTT]::HasConfig()
+      IsRecording = $false
+    }
+  )
   LocalSTT() {}
 
   static [IO.Fileinfo] RecordAudio() {
-    return [LocalSTT]::RecordAudio([LocalSTT]::config.outFile)
+    return [LocalSTT]::RecordAudio([LocalSTT].config.outFile)
   }
   static [IO.Fileinfo] RecordAudio([string]$outFile) {
-    $_host_UI = (Get-Variable -Name Host -ValueOnly).UI
-    $defaults = [LocalSTT]::config
-    if ($null -ne [LocalSTT]::recorder) { [LocalSTT]::recorder.Stop() }
-    [LocalSTT]::recorder = [AudioRecorder]::New([TcpListener]::new([IPEndpoint]::new([IPAddress][LocalSTT]::config.host, [LocalSTT]::config.port)), [IO.FileInfo]::New($outFile))
-    $pythonProcess = Start-Process -FilePath "python" -ArgumentList "$($defaults.backgroundScript) --host `"$($defaults.host)`" --port $($defaults.port) --amplify-rate $($defaults.amplifyRate) --outfile `"$outFile`" --working-directory `"$($defaults.workingDirectory)`"" -PassThru -NoNewWindow
-    Write-Host "STT server starting. PID: $($pythonProcess.Id)" -f Green
-    $stream = [LocalSTT]::recorder.Start(); $buffer = [byte[]]::new(1024)
+    if ([LocalSTT]::status.IsRecording) { throw [InvalidOperationException]::new("LocalSTT is already recording.") }
+    [void][LocalSTT]::ResolveRequirements()
+    if ($null -ne [LocalSTT]::recorder) { [LocalSTT]::recorder.Stop() }; $_c = [LocalSTT].config
+    [LocalSTT]::recorder = [AudioRecorder]::New([TcpListener]::new([IPEndpoint]::new([IPAddress]$_c.host, $_c.port)), [IO.FileInfo]::New($outFile))
+    $pythonProcess = Start-Process -FilePath "python" -ArgumentList "$($_c.backgroundScript) --host `"$($_c.host)`" --port $($_c.port) --amplify-rate $($_c.amplifyRate) --outfile `"$outFile`" --working-directory `"$($_c.workingDirectory)`"" -PassThru -NoNewWindow
+    Write-Console "(LocalSTT) " -f SlateBlue -NoNewLine; Write-Console "Server starting @ http://$([LocalSTT]::recorder.listener.LocalEndpoint) PID: $($pythonProcess.Id)" -f LemonChiffon;
+    $stream = [LocalSTT]::recorder.Start(); $buffer = [byte[]]::new(1024); $OgctrInput = [Console]::TreatControlCAsInput;
     try {
       while ($true) {
-        if ($_host_UI.RawUI.KeyAvailable) {
-          $key = $_host_UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-          if (($key.VirtualKeyCode -eq 67) -and $key.ControlKeyState.IsCtrl) {
-            Write-Host "Ctrl+C pressed." -f Yellow
-            [LocalSTT]::recorder.Stop($pythonProcess.Id)
-            break
-          }
-        }
         $bytesRead = $stream.Read($buffer, 0, $buffer.Length)
-        if ($bytesRead -gt 0) {
-          $_str = [System.Text.Encoding]::UTF8.GetString($buffer, 0, $bytesRead).Split('}{')[-1]; $c = [char]123
-          $json = $_str.StartsWith($c) ? $_str : ([char]123 + $_str)
-          $data = $json | ConvertFrom-Json
-          $prog = $data.progress; $perc = ($prog -ge 100) ? 100 : $prog # failsafe to never exceed 100 and cause an error
-          Write-Progress -Activity "[pyaudio]" -Status "$($data.status) $prog%" -PercentComplete $perc
-        } else {
-          Write-Host "No json data received. Python script may have stopped." -f Red
-          break
-        }
+        if ($bytesRead -le 0) { Write-Host "No data was received from stt.py!" -f Red; break }
+        $_str = [System.Text.Encoding]::UTF8.GetString($buffer, 0, $bytesRead).Split('}{')[-1]; $c = [char]123
+        $json = $_str.StartsWith($c) ? $_str : ([char]123 + $_str)
+        $data = $json | ConvertFrom-Json
+        $prog = $data.progress;
+        # $perc = ($prog -ge 100) ? 100 : $prog # failsafe to never exceed 100 and cause an error
+        # Write-Progress -Activity "(LocalSTT)" -Status "$($data.status) $prog%" -PercentComplete $perc
+        [progressUtil]::WriteProgressBar($prog, "(LocalSTT) $($data.status)")
         [threading.Thread]::Sleep(200)
       }
     } catch {
       Write-Host "Error receiving data: $($_.Exception.Message)"
     } finally {
+      [Console]::TreatControlCAsInput = $OgctrInput
       [LocalSTT]::recorder.Stop($pythonProcess.Id)
     }
-    return $outFile
+    return [LocalSTT]::recorder.outFile
+  }
+  static [bool] ResolveRequirements() {
+    $req = [LocalSTT].config.requirementsfile
+    $res = [IO.File]::Exists($req); $_c = [LocalSTT].config
+    if (!$res) { throw "LocalSTT failed to resolve pip requirements. From file: '$req'." }
+    if (![LocalSTT]::status.HasConfig) { throw [InvalidOperationException]::new("LocalSTT config found.") };
+    if ($_c.env.State -eq "Inactive") { $_c.env.Activate() }
+    Write-Console "(LocalSTT) " -f SlateBlue -NoNewLine; Write-Console "Resolve pip requirements... File@$(Invoke-PathShortener $req)" -f LemonChiffon;
+    pip install -r $req;
+    return $res
+  }
+  static [bool] HasConfig() {
+    if ($null -eq [LocalSTT].config) { [LocalSTT].PsObject.Properties.Add([PSScriptproperty]::New("config", { return [LocalSTT]::LoadConfig() }, { throw [SetValueException]::new("config can only be imported or edited") })) }
+    return $null -ne [LocalSTT].config
   }
   static [PsObject] LoadConfig() {
     return [LocalSTT]::LoadConfig((Resolve-Path .).Path)
   }
   static [PsObject] LoadConfig([string]$current_path) {
+    # .DESCRIPTION
+    #   Load the configuration from json or toml file
     $module_path = (Get-Module LocalSTT -ListAvailable -Verbose:$false).ModuleBase
+    # default config values
     $c = @{
       port             = 65432
       host             = "127.0.0.1"
       amplifyRate      = "1.0"
       workingDirectory = $current_path
+      requirementsfile = [IO.Path]::Combine($module_path, "Private", "requirements.txt")
       backgroundScript = [IO.Path]::Combine($module_path, "Private", "stt.py")
       outFile          = [IO.Path]::Combine($current_path, "$(Get-Date -Format 'yyyyMMddHHmmss')_output.wav")
     } -as "PsRecord"
-    $c.PsObject.Properties.Add([PSScriptproperty]::New("env", { return [LocalSTT]::config.workingDirectory | New-PipEnv }, { throw [SetValueException]::new("env is read-only") }))
+    $c.PsObject.Properties.Add([PSScriptproperty]::New("env", { return [LocalSTT].config.workingDirectory | New-PipEnv }, { throw [SetValueException]::new("env is read-only") }))
+    $c.PsObject.Properties.Add([PSScriptproperty]::New("modulePath", [scriptblock]::Create("return `"$module_path`""), { throw [SetValueException]::new("modulePath is read-only") }))
     return $c
   }
 }
