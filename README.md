@@ -2,13 +2,13 @@
 
 A speech to text without leaving your terminal.
 
-## 📦 Installation
+## [📦 Installation](README.md)
 
 ```PowerShell
 Install-Module LocalSTT
 ```
 
-## 📄 Usage
+## [🗒 Usage](docs/Readme.md)
 
 ```PowerShell
 Import-Module LocalSTT
@@ -18,6 +18,6 @@ Record-Audio # for now all this does is record audio and save it to the current 
 # - https://github.com/Marksdo/Whisper
 ```
 
-## License
+## [🧾 License](LICENSE)
 
 This project is licensed under the [WTFPL License](LICENSE).
