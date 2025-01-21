@@ -16,11 +16,9 @@ stop_event: threading.Event = threading.Event()
 def get_text_from_audio(input_audio_file: str, output_text_file: str) -> None:
     # or run on CPU with INT8
     model = WhisperModel(model_size, device="cpu", compute_type="int8")
+    print("• transcribing...")
     segments, info = model.transcribe(input_audio_file, beam_size=5)
-    print(
-        "Detected language '%s' with probability %f"
-        % (info.language, info.language_probability)
-    )
+    print("Detected language '%s' with probability %f" % (info.language, info.language_probability))
 
     with open(output_text_file, "w") as outfile:
         for segment in segments:
@@ -39,7 +37,6 @@ if __name__ == "__main__":
     transcribe_thread.start()
 
     try:
-      print("• transcribing...")
       while not stop_event.is_set():
         time.sleep(0.1)  # Short delay to prevent busy waiting
     except KeyboardInterrupt:
