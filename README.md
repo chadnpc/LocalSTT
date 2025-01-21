@@ -1,14 +1,14 @@
-﻿# [LocalSTT](https://www.powershellgallery.com/packages/LocalSTT)
+﻿# [LocalStt ၊▹](https://www.powershellgallery.com/packages/LocalSTT)
 
 A speech to text without leaving your terminal.
 
-## Usage
+## 📦 Installation
 
 ```PowerShell
 Install-Module LocalSTT
 ```
 
-then
+## 📄 Usage
 
 ```PowerShell
 Import-Module LocalSTT
