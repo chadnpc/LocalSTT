@@ -26,9 +26,9 @@ class AudioRecorder {
   }
   [Stream] Start([TcpClient]$client) {
     $this.client = $client
-    Write-Console "• " -f SlateBlue -NoNewLine; Write-Console "OutFile: " -f LightGoldenrodYellow -NoNewLine; Write-Console "'$([LocalSTT]::recorder.outFile)'" -f LimeGreen; Write-Console "┆" -f LimeGreen
+    Write-Console "● " -f SlateBlue -NoNewLine; Write-Console "OutFile: " -f LightGoldenrodYellow -NoNewLine; Write-Console "'$([LocalSTT]::recorder.outFile)'" -f LimeGreen; Write-Console "┆" -f LimeGreen
     $this.stream = $client.GetStream()
-    Write-Console "• " -f SlateBlue -NoNewLine; Write-Console "Started recording. Press Ctrl+C to stop." -f LightGoldenrodYellow
+    Write-Console "● " -f SlateBlue -NoNewLine; Write-Console "Started recording. Press Ctrl+C to stop." -f LightGoldenrodYellow
     [LocalSTT]::status.IsRecording = $true
     return $this.stream
   }
@@ -57,6 +57,7 @@ class AudioRecorder {
 # .LINK
 #   https://pyaudio.readthedocs.io/en/stable/
 class LocalSTT {
+  static $p
   static [AudioRecorder]$recorder
   static [hashtable]$status = [hashtable]::Synchronized(@{
       HasConfig   = [LocalSTT]::HasConfig()
@@ -95,22 +96,14 @@ class LocalSTT {
   }
   static [string] TranscribeAudio([IO.FileInfo]$InputAudio, [string]$outFile) {
     [ValidateNotNullOrEmpty()][IO.FileInfo]$InputAudio = $InputAudio;
-    if (!$InputAudio.Exists) { throw [FileNotFoundException]::New("Could Not Find Audio File $($InputAudio.FullName)") }
-    [void][LocalSTT]::ResolveRequirements(); $_c = [LocalSTT].config; $_t = [IO.Path]::Combine(($_c.backgroundScript | Split-Path), "transcribe.py")
-
-    $job = [progressUtil]::WaitJob("● Transcribing", {
-        param([string]$pyscript, [string]$inputFile, [string]$outFile, [string]$dir)
-
-        $Process = Start-Process -FilePath "python" -ArgumentList "$pyscript --inputfile `"$inputFile`" --outfile `"$outFile`" --working-directory `"$dir`"" -WorkingDirectory $dir -PassThru -NoNewWindow;
-        while ([IO.File]::Exists($outFile)) {
-          [threading.Thread]::Sleep(100)
-        }
-        Write-Console " Finalizing" -f SlateBlue
-        $Process.WaitForExit()
-        return [IO.File]::ReadAllText($outFile)
-      }, ($_t, $InputAudio.FullName, $outFile, $_c.workingDirectory)
-    )
-    return $job | Receive-Job
+    [string]$inputFile = $InputAudio.FullName;
+    if (!$InputAudio.Exists) { throw [FileNotFoundException]::New("Could Not Find Audio File $inputFile") }
+    [void][LocalSTT]::ResolveRequirements(); $_c = [LocalSTT].config;
+    $_t = [IO.Path]::Combine(($_c.backgroundScript | Split-Path), "transcribe.py"); $dir = $_c.workingDirectory
+    $Process = Start-Process -FilePath "python" -ArgumentList "$_t --inputfile `"$inputFile`" --outfile `"$outFile`" --working-directory `"$dir`"" -WorkingDirectory $dir -PassThru -NoNewWindow;
+    $Process.WaitForExit()
+    $process.Kill(); $Process.Dispose()
+    return [IO.File]::ReadAllText($outFile)
   }
   static [bool] ResolveRequirements() {
     if ([LocalSTT]::status.IsRecording) { Write-Warning "LocalSTT is already recording." }
