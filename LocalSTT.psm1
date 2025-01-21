@@ -69,24 +69,22 @@ class LocalSTT {
     return [LocalSTT]::RecordAudio([LocalSTT].config.outFile)
   }
   static [IO.Fileinfo] RecordAudio([string]$outFile) {
+    [ValidateNotNullOrWhiteSpace()][string]$outFile = $outFile
     if ([LocalSTT]::status.IsRecording) { throw [InvalidOperationException]::new("LocalSTT is already recording.") }
-    [void][LocalSTT]::ResolveRequirements()
-    if ($null -ne [LocalSTT]::recorder) { [LocalSTT]::recorder.Stop() }; $_c = [LocalSTT].config
-    [LocalSTT]::recorder = [AudioRecorder]::New([TcpListener]::new([IPEndpoint]::new([IPAddress]$_c.host, $_c.port)), [IO.FileInfo]::New($outFile))
+    [void][LocalSTT]::ResolveRequirements(); if ($null -ne [LocalSTT]::recorder) { [LocalSTT]::recorder.Stop() };
+    $_c = [LocalSTT].config; [LocalSTT]::recorder = [AudioRecorder]::New([TcpListener]::new([IPEndpoint]::new([IPAddress]$_c.host, $_c.port)), [IO.FileInfo]::New($outFile))
     $pythonProcess = Start-Process -FilePath "python" -ArgumentList "$($_c.backgroundScript) --host `"$($_c.host)`" --port $($_c.port) --amplify-rate $($_c.amplifyRate) --outfile `"$outFile`" --working-directory `"$($_c.workingDirectory)`"" -PassThru -NoNewWindow
-    Write-Console "(LocalSTT) " -f SlateBlue -NoNewLine; Write-Console "Server starting @ http://$([LocalSTT]::recorder.listener.LocalEndpoint) PID: $($pythonProcess.Id)" -f LemonChiffon;
-    $stream = [LocalSTT]::recorder.Start(); $buffer = [byte[]]::new(1024); $OgctrInput = [Console]::TreatControlCAsInput;
+    Write-Console "(LocalSTT) " -f SlateBlue -NoNewLine; Write-Console "၊▹ Server starting @ http://$([LocalSTT]::recorder.listener.LocalEndpoint) PID: $($pythonProcess.Id)" -f LemonChiffon;
+    $OgctrInput = [Console]::TreatControlCAsInput;
     try {
+      $stream = [LocalSTT]::recorder.Start(); $buffer = [byte[]]::new(1024);
       while ($true) {
         $bytesRead = $stream.Read($buffer, 0, $buffer.Length)
         if ($bytesRead -le 0) { Write-Host "No data was received from stt.py!" -f Red; break }
         $_str = [System.Text.Encoding]::UTF8.GetString($buffer, 0, $bytesRead).Split('}{')[-1]; $c = [char]123
         $json = $_str.StartsWith($c) ? $_str : ([char]123 + $_str)
         $data = $json | ConvertFrom-Json
-        $prog = $data.progress;
-        # $perc = ($prog -ge 100) ? 100 : $prog # failsafe to never exceed 100 and cause an error
-        # Write-Progress -Activity "(LocalSTT)" -Status "$($data.status) $prog%" -PercentComplete $perc
-        [progressUtil]::WriteProgressBar($prog, "(LocalSTT) $($data.status)")
+        Write-Progress -Activity "(LocalSTT) ၊▹ " -Status "● $($data.process)" -PercentComplete (($data.progress -ge 100) ? 100 : $data.progress)
         [threading.Thread]::Sleep(200)
       }
     } catch {
@@ -101,10 +99,12 @@ class LocalSTT {
     $req = [LocalSTT].config.requirementsfile
     $res = [IO.File]::Exists($req); $_c = [LocalSTT].config
     if (!$res) { throw "LocalSTT failed to resolve pip requirements. From file: '$req'." }
+    Write-Console "Found file @$(Invoke-PathShortener $req)" -f LemonChiffon;
     if (![LocalSTT]::status.HasConfig) { throw [InvalidOperationException]::new("LocalSTT config found.") };
     if ($_c.env.State -eq "Inactive") { $_c.env.Activate() }
-    Write-Console "(LocalSTT) " -f SlateBlue -NoNewLine; Write-Console "Resolve pip requirements... File@$(Invoke-PathShortener $req)" -f LemonChiffon;
-    pip install -r $req;
+    Write-Console "(LocalSTT) " -f SlateBlue -NoNewLine; Write-Console "၊▹ Resolve pip requirements ... " -f LemonChiffon -NoNewLine -Animate
+    pip install -r $req
+    Write-Console "Done" -f LimeGreen
     return $res
   }
   static [bool] HasConfig() {
@@ -128,7 +128,7 @@ class LocalSTT {
       backgroundScript = [IO.Path]::Combine($module_path, "Private", "stt.py")
       outFile          = [IO.Path]::Combine($current_path, "$(Get-Date -Format 'yyyyMMddHHmmss')_output.wav")
     } -as "PsRecord"
-    $c.PsObject.Properties.Add([PSScriptproperty]::New("env", { return [LocalSTT].config.workingDirectory | New-PipEnv }, { throw [SetValueException]::new("env is read-only") }))
+    $c.PsObject.Properties.Add([PSScriptproperty]::New("env", { return [LocalSTT].config.workingDirectory | New-pipEnv }, { throw [SetValueException]::new("env is read-only") }))
     $c.PsObject.Properties.Add([PSScriptproperty]::New("modulePath", [scriptblock]::Create("return `"$module_path`""), { throw [SetValueException]::new("modulePath is read-only") }))
     return $c
   }
@@ -142,17 +142,7 @@ $typestoExport = @(
 $TypeAcceleratorsClass = [PsObject].Assembly.GetType('System.Management.Automation.TypeAccelerators')
 foreach ($Type in $typestoExport) {
   if ($Type.FullName -in $TypeAcceleratorsClass::Get.Keys) {
-    $Message = @(
-      "Unable to register type accelerator '$($Type.FullName)'"
-      'Accelerator already exists.'
-    ) -join ' - '
-
-    [System.Management.Automation.ErrorRecord]::new(
-      [System.InvalidOperationException]::new($Message),
-      'TypeAcceleratorAlreadyExists',
-      [System.Management.Automation.ErrorCategory]::InvalidOperation,
-      $Type.FullName
-    ) | Write-Warning
+    "TypeAcceleratorAlreadyExists - Unable to register type accelerator '$($Type.FullName)'" | Write-Debug
   }
 }
 # Add type accelerators for every exportable type.
