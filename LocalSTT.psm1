@@ -95,6 +95,16 @@ class LocalSTT {
     }
     return [LocalSTT]::recorder.outFile
   }
+  static [string] TranscribeAudio([IO.FileInfo]$InputAudio) {
+    $_c = [LocalSTT].config;
+    $_t = $_c.backgroundScript | Split-Path
+    $outFile = [IO.Path]::Combine($_t, "$(Get-Date -Format 'yyyyMMddHHmmss')_output.txt")
+    $audioFile = [IO.FileInfo]::New([IO.Path]::Combine($_t, $InputAudio.Name))
+    $null = Start-Process -FilePath "python" -ArgumentList "$($_c.backgroundScript) --inputfile `"$($InputAudio.FullName)`" --outfile `"$outFile`" --working-directory `"$($_c.workingDirectory)`"" -PassThru -NoNewWindow
+    return [IO.File]::Replace($audioFile.FullName)
+
+    return [LocalSTT]::TranscribeAudio($audioFile, $null)
+  }
   static [bool] ResolveRequirements() {
     $req = [LocalSTT].config.requirementsfile
     $res = [IO.File]::Exists($req); $_c = [LocalSTT].config
