@@ -14,6 +14,8 @@ Install-Module LocalSTT
 Import-Module LocalSTT
 Record-Audio # for now all this does is record audio and save it to the current directory
 # wip: Transcribe-Audio cmdlet. will transcribe the audio file to text
+# candidates:
+# - https://github.com/Marksdo/Whisper
 ```
 
 ## License
