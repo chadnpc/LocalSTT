@@ -24,13 +24,13 @@ def get_text_from_audio(input_audio_file: str, output_text_file: str) -> None:
 
     with open(output_text_file, "w") as outfile:
         for segment in segments:
-            text_to_write = "[%.2fs -> %.2fs] %s\n" % (
+            text_to_print = "[%.2fs -> %.2fs] %s\n" % (
                 segment.start,
                 segment.end,
                 segment.text,
             )
-            print(text_to_write.strip())
-            outfile.write(text_to_write)
+            print(text_to_print.strip())
+            outfile.write(segment.text)
 
     print("• transcription done!")
 
