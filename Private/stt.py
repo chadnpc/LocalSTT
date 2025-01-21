@@ -125,7 +125,7 @@ def audio_recording_loop():
         amplified_data = amplified_audio.tobytes()
         frames.append(amplified_data)
         progress_object = {
-          "status": f"recording amp = {amplify_rate}",
+          "process": "Recording",
           "progress": calculate_progress_percentage(len(frames)),
         }
         send_progress_over_socket(progress_object)
@@ -147,7 +147,7 @@ def audio_recording_loop():
       wf.writeframes(b''.join(frames))
       wf.close()
       send_progress_over_socket({
-          "status": "done",
+          "process": "done",
           "progress": 100,
         }
       )
