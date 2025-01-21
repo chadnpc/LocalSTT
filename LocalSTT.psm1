@@ -70,10 +70,8 @@ class LocalSTT {
   }
   static [IO.Fileinfo] RecordAudio([string]$outFile) {
     [ValidateNotNullOrWhiteSpace()][string]$outFile = $outFile
-    if ([LocalSTT]::status.IsRecording) { throw [InvalidOperationException]::new("LocalSTT is already recording.") }
-    [void][LocalSTT]::ResolveRequirements(); if ($null -ne [LocalSTT]::recorder) { [LocalSTT]::recorder.Stop() };
-    $_c = [LocalSTT].config; [LocalSTT]::recorder = [AudioRecorder]::New([TcpListener]::new([IPEndpoint]::new([IPAddress]$_c.host, $_c.port)), [IO.FileInfo]::New($outFile))
-    $pythonProcess = Start-Process -FilePath "python" -ArgumentList "$($_c.backgroundScript) --host `"$($_c.host)`" --port $($_c.port) --amplify-rate $($_c.amplifyRate) --outfile `"$outFile`" --working-directory `"$($_c.workingDirectory)`"" -PassThru -NoNewWindow
+    [void][LocalSTT]::ResolveRequirements(); $_c = [LocalSTT].config; [LocalSTT]::recorder = [AudioRecorder]::New([TcpListener]::new([IPEndpoint]::new([IPAddress]$_c.host, $_c.port)), [IO.FileInfo]::New($outFile)); $dir = $_c.workingDirectory
+    $pythonProcess = Start-Process -FilePath "python" -ArgumentList "$($_c.backgroundScript) --host `"$($_c.host)`" --port $($_c.port) --amplify-rate $($_c.amplifyRate) --outfile `"$outFile`" --working-directory `"$dir`"" -WorkingDirectory $dir -PassThru -NoNewWindow
     Write-Console "(LocalSTT) " -f SlateBlue -NoNewLine; Write-Console "၊▹ Server starting @ http://$([LocalSTT]::recorder.listener.LocalEndpoint) PID: $($pythonProcess.Id)" -f LemonChiffon;
     $OgctrInput = [Console]::TreatControlCAsInput;
     try {
@@ -95,19 +93,29 @@ class LocalSTT {
     }
     return [LocalSTT]::recorder.outFile
   }
-  static [string] TranscribeAudio([IO.FileInfo]$InputAudio) {
-    $_c = [LocalSTT].config;
-    $_t = $_c.backgroundScript | Split-Path
-    $outFile = [IO.Path]::Combine($_t, "$(Get-Date -Format 'yyyyMMddHHmmss')_output.txt")
-    $audioFile = [IO.FileInfo]::New([IO.Path]::Combine($_t, $InputAudio.Name))
-    $null = Start-Process -FilePath "python" -ArgumentList "$($_c.backgroundScript) --inputfile `"$($InputAudio.FullName)`" --outfile `"$outFile`" --working-directory `"$($_c.workingDirectory)`"" -PassThru -NoNewWindow
-    return [IO.File]::Replace($audioFile.FullName)
+  static [string] TranscribeAudio([IO.FileInfo]$InputAudio, [string]$outFile) {
+    [ValidateNotNullOrEmpty()][IO.FileInfo]$InputAudio = $InputAudio;
+    if (!$InputAudio.Exists) { throw [FileNotFoundException]::New("Could Not Find Audio File $($InputAudio.FullName)") }
+    [void][LocalSTT]::ResolveRequirements(); $_c = [LocalSTT].config; $_t = [IO.Path]::Combine(($_c.backgroundScript | Split-Path), "transcribe.py")
 
-    return [LocalSTT]::TranscribeAudio($audioFile, $null)
+    $job = [progressUtil]::WaitJob("● Transcribing", {
+        param([string]$pyscript, [string]$inputFile, [string]$outFile, [string]$dir)
+
+        $Process = Start-Process -FilePath "python" -ArgumentList "$pyscript --inputfile `"$inputFile`" --outfile `"$outFile`" --working-directory `"$dir`"" -WorkingDirectory $dir -PassThru -NoNewWindow;
+        while ([IO.File]::Exists($outFile)) {
+          [threading.Thread]::Sleep(100)
+        }
+        Write-Console " Finalizing" -f SlateBlue
+        $Process.WaitForExit()
+        return [IO.File]::ReadAllText($outFile)
+      }, ($_t, $InputAudio.FullName, $outFile, $_c.workingDirectory)
+    )
+    return $job | Receive-Job
   }
   static [bool] ResolveRequirements() {
-    $req = [LocalSTT].config.requirementsfile
-    $res = [IO.File]::Exists($req); $_c = [LocalSTT].config
+    if ([LocalSTT]::status.IsRecording) { Write-Warning "LocalSTT is already recording." }
+    if ($null -ne [LocalSTT]::recorder) { [LocalSTT]::recorder.Stop() }; $_c = [LocalSTT].config
+    $req = $_c.requirementsfile; $res = [IO.File]::Exists($req);
     if (!$res) { throw "LocalSTT failed to resolve pip requirements. From file: '$req'." }
     Write-Console "Found file @$(Invoke-PathShortener $req)" -f LemonChiffon;
     if (![LocalSTT]::status.HasConfig) { throw [InvalidOperationException]::new("LocalSTT config found.") };
