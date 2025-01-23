@@ -14,6 +14,7 @@ parser.add_argument('--host', type=str, default='127.0.0.1', help='Host for the 
 parser.add_argument('--port', type=int, default=65432, help='Port for the socket connection')
 parser.add_argument('--amplify-rate', type=float, default=1.1, help='Amplification rate for audio')
 parser.add_argument('--outfile', type=str, default=time.strftime("%Y%m%d-%H%M%S") + "_output.wav", help='Output file for the recorded audio')
+parser.add_argument('--duration-in-minutes', type=float, default=3, help='Duration of the recording in minutes')
 parser.add_argument('--working-directory', type=str, default=os.getcwd(), help='Working directory for the script')
 args = parser.parse_args()
 
@@ -26,8 +27,10 @@ FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 44100
 CHUNK = 1024
-DURATION = 5 #minutes
+DURATION = args.duration_in_minutes
 frames = []
+percent = 0
+elapsed_time = 0
 
 audio = pyaudio.PyAudio()
 stream = None
@@ -89,14 +92,19 @@ def get_audio_input_devices(audio):
           )
     return devices
 
-def calculate_progress_percentage(total_received_chunk, duration_in_minutes=DURATION, chunk_size=CHUNK):
-    total_expected_bytes = (duration_in_minutes * 60 * 1000 // 100) * chunk_size  # Total chunks * chunk_size
-    progress_percentage = round((total_received_chunk * chunk_size / total_expected_bytes) * 100, 2)
-    return progress_percentage
+def calculate_progress_percentage(elapsed_time, duration_in_minutes=DURATION):
+    """
+    Calculate the progress percentage based on elapsed time and total duration.
+    """
+    if duration_in_minutes <= 0:
+        return 0  # Avoid division by zero
+    progress_percentage = round((elapsed_time / (duration_in_minutes * 60)) * 100, 2)
+    return min(progress_percentage, 100) # Ensure it doesn't exceed 100%
 
 def audio_recording_loop():
-  global stream, frames
+  global stream, frames, percent, elapsed_time
   amplify_rate = args.amplify_rate
+  start_time = time.time() # Record start time
   # Select best audio device
   devices = get_audio_input_devices(audio)
   best_device_index = select_best_audio_device(devices)
@@ -116,6 +124,7 @@ def audio_recording_loop():
   try:
     while not stop_event.is_set():
       data = stream.read(CHUNK, exception_on_overflow=False)
+      elapsed_time = time.time() - start_time
       if data:
         # Convert raw audio to numpy array
         audio_array = np.frombuffer(data, dtype=np.int16)
@@ -124,11 +133,16 @@ def audio_recording_loop():
         # Convert back to bytes
         amplified_data = amplified_audio.tobytes()
         frames.append(amplified_data)
-        progress_object = {
-          "process": "Recording",
-          "progress": calculate_progress_percentage(len(frames)),
-        }
-        send_progress_over_socket(progress_object)
+        percent = calculate_progress_percentage(elapsed_time)
+        send_progress_over_socket({
+            "process": "Recording" if not stop_event.is_set() or percent < 100 else "done",
+            "elapsed_time": elapsed_time,
+            "progress": percent,
+          }
+        )
+        if percent == 100:
+          stop_event.set()
+
   except socket.timeout as e:
     print(f"Socket timeout error: {e}")
   except socket.error as e:
@@ -139,18 +153,13 @@ def audio_recording_loop():
     stream.stop_stream()
     stream.close()
     audio.terminate()
-    if frames:
-      wf = wave.open(os.path.join(args.working_directory, args.outfile), 'wb')
-      wf.setnchannels(CHANNELS)
-      wf.setsampwidth(audio.get_sample_size(FORMAT))
-      wf.setframerate(RATE)
-      wf.writeframes(b''.join(frames))
-      wf.close()
-      send_progress_over_socket({
-          "process": "done",
-          "progress": 100,
-        }
-      )
+    wf = wave.open(os.path.join(args.working_directory, args.outfile), 'wb')
+    wf.setnchannels(CHANNELS)
+    wf.setsampwidth(audio.get_sample_size(FORMAT))
+    wf.setframerate(RATE)
+    wf.writeframes(b''.join(frames))
+    wf.close()
+
 
 def setup_socket_connection():
     global client_socket
@@ -174,9 +183,12 @@ def send_progress_over_socket(progress_object):
           client_socket.sendall(progress_in_json.encode('utf-8'))
         except BrokenPipeError:
             stop_event.set()
-            raise Exception("Error: Socket connection broken.")
+            if progress_object["process"] != "done":
+              raise Exception("\nSocket connection broken.")
+            else:
+              print("\ndone. Socket connection closed.")
         except Exception as e:
-            raise Exception("Error sending progress >> {e}")
+            raise Exception("Failed to send progress >> {e}")
 
 if __name__ == "__main__":
     setup_socket_connection()

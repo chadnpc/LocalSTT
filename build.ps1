@@ -1,7 +1,7 @@
 ﻿
 #!/usr/bin/env pwsh
 # .SYNOPSIS
-#   LocalSTT buildScript v0.1.1
+#   LocalSTT buildScript v0.1.2
 # .DESCRIPTION
 #   A custom build script for the module LocalSTT
 # .LINK

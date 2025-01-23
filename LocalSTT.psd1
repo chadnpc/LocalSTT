@@ -11,7 +11,7 @@
   RootModule            = 'LocalSTT.psm1'
 
   # Version number of this module.
-  ModuleVersion         = '0.1.1'
+  ModuleVersion         = '0.1.2'
 
   # Supported PSEditions
   # CompatiblePSEditions = @()
@@ -108,7 +108,7 @@
       # ReleaseNotes of this module
       ReleaseNotes = '# Release Notes
 
-- Version_0.1.1
+- Version_0.1.2
 - Functions ...
 - Optimizations
 '
