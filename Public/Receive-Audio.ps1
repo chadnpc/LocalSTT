@@ -7,10 +7,10 @@ function Receive-Audio {
   #   https://github.com/alainQtec/LocalSTT/blob/main/Public/Receive-Audio.ps1
   # .EXAMPLE
   #   Record-Audio
-  #   Saves audio to the current directory. (Works fine)
+  #   Saves audio to the current directory.
   # .EXAMPLE
   #   Record-Audio -o ~/output.wav
-  #   Will record audio and save it to the specified path (WIP)
+  #   Will record audio for 3 minutes and save it to the specified path
   [CmdletBinding()][OutputType([System.IO.FileInfo])][Alias('Record-Audio')]
   param (
     [Parameter(Mandatory = $false, Position = 0, ValueFromPipeline = $true)]
@@ -29,14 +29,18 @@ function Receive-Audio {
           throw $_.Exception
         }
       })][Alias('o')]
-    [string]$OutFile
+    [string]$OutFile,
+
+    [Parameter(Mandatory = $false, Position = 1, helpMessage = 'Duration of the recording in minutes')]
+    [Alias('d')][ValidateNotNullOrEmpty()]
+    [float]$Duration = .5 # 30 seconds
   )
   begin {
     $params = $PSCmdlet.MyInvocation.BoundParameters
     $_ofile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutFile)
   }
   process {
-    $rec = $params.ContainsKey('OutFile') ? ([LocalSTT]::RecordAudio($_ofile)) : ([LocalSTT]::RecordAudio())
+    $rec = $params.ContainsKey('OutFile') ? ([LocalSTT]::RecordAudio($_ofile, $Duration)) : ([LocalSTT]::RecordAudio($Duration))
     return $rec
   }
 }
