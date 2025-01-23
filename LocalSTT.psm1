@@ -11,7 +11,6 @@ using namespace System.Management.Automation
 class AudioRecorder {
   [Socket]$server
   [TcpClient]$client
-  [timespan]$elapsed
   [FileInfo]$outFile
   hidden [Stream]$stream
   hidden [TcpListener]$listener
@@ -58,38 +57,45 @@ class AudioRecorder {
 # .LINK
 #   https://pyaudio.readthedocs.io/en/stable/
 class LocalSTT {
-  static $p
   static [AudioRecorder]$recorder
   static [hashtable]$status = [hashtable]::Synchronized(@{
-      HasConfig   = [LocalSTT]::HasConfig()
-      IsRecording = $false
+      Process = ''
+      HasConfig       = [LocalSTT]::HasConfig()
+      IsRecording     = $false
+      PercentComplete = 0
     }
   )
   LocalSTT() {}
 
-  static [IO.Fileinfo] RecordAudio() {
-    return [LocalSTT]::RecordAudio([LocalSTT].config.outFile)
+  static [IO.Fileinfo] RecordAudio() { return [LocalSTT]::RecordAudio(3) }
+
+  static [IO.Fileinfo] RecordAudio([float]$minutes) {
+    return [LocalSTT]::RecordAudio([LocalSTT].config.outFile, [Timespan]::new(0, 0, $minutes*60))
   }
-  static [IO.Fileinfo] RecordAudio([string]$outFile) {
+  static [IO.Fileinfo] RecordAudio([string]$outFile, [float]$minutes) {
+    return [LocalSTT]::RecordAudio($outFile, [Timespan]::new(0, 0, $minutes*60))
+  }
+  static [IO.Fileinfo] RecordAudio([string]$outFile, [Timespan]$duration) {
     [ValidateNotNullOrWhiteSpace()][string]$outFile = $outFile
     [void][LocalSTT]::ResolveRequirements(); $_c = [LocalSTT].config; [LocalSTT]::recorder = [AudioRecorder]::New([TcpListener]::new([IPEndpoint]::new([IPAddress]$_c.host, $_c.port)), [IO.FileInfo]::New($outFile)); $dir = $_c.workingDirectory
-    $pythonProcess = Start-Process -FilePath "python" -ArgumentList "$($_c.backgroundScript) --host `"$($_c.host)`" --port $($_c.port) --amplify-rate $($_c.amplifyRate) --outfile `"$outFile`" --working-directory `"$dir`"" -WorkingDirectory $dir -PassThru -NoNewWindow
-    Write-Console "(LocalSTT) " -f SlateBlue -NoNewLine; Write-Console "၊▹ Recording server starting @ http://$([LocalSTT]::recorder.listener.LocalEndpoint) PID: $($pythonProcess.Id)" -f LemonChiffon;
+    $pythonProcess = Start-Process -FilePath "python" -ArgumentList "$($_c.backgroundScript) --host `"$($_c.host)`" --port $($_c.port) --amplify-rate $($_c.amplifyRate) --outfile `"$outFile`" --duration-in-minutes=$($duration.TotalMinutes) --working-directory `"$dir`"" -WorkingDirectory $dir -PassThru -NoNewWindow
+    Write-Console "(LocalSTT) " -f SlateBlue -NoNewLine; Write-Console "▶︎ Recording server starting @ http://$([LocalSTT]::recorder.listener.LocalEndpoint) PID: $($pythonProcess.Id)" -f LemonChiffon;
     $OgctrInput = [Console]::TreatControlCAsInput;
     try {
-      $stream = [LocalSTT]::recorder.Start(); $buffer = [byte[]]::new(1024); $start_time = [datetime]::Now
-      while ($true) {
+      $stream = [LocalSTT]::recorder.Start(); $buffer = [byte[]]::new(1024); $start_time = [datetime]::Now; [LocalSTT]::status.PercentComplete = 0;
+      do {
         $bytesRead = $stream.Read($buffer, 0, $buffer.Length)
-        if ($bytesRead -le 0) { Write-Host "No data was received from stt.py!" -f Red; break }
-        $_str = [System.Text.Encoding]::UTF8.GetString($buffer, 0, $bytesRead).Split('}{')[-1]; $c = [char]123
-        $json = $_str.StartsWith($c) ? $_str : ([char]123 + $_str)
-        $data = $json | ConvertFrom-Json;
-        [LocalSTT]::recorder.elapsed = New-TimeSpan -Start $start_time -End ([Datetime]::Now)
-        [progressUtil]::WriteProgressBar((($data.progress -ge 100) ? 100 : $data.progress), $true, 5, "(LocalSTT) ▶︎ ● $($data.process) •၊၊||၊|။||||။‌‌‌‌‌၊|• $([LocalSTT]::recorder.elapsed.Minutes):$([LocalSTT]::recorder.elapsed.Seconds)", $false)
-        [threading.Thread]::Sleep(200)
-      }
+        if ([LocalSTT]::status.PercentComplete -ne 100 -and $bytesRead -le 0) { Write-Host "`nNo data was received from stt.py!" -f Red; break }
+        $_str = [System.Text.Encoding]::UTF8.GetString($buffer, 0, $bytesRead).Split('}{')[-1];
+        if (![string]::IsNullOrWhiteSpace($_str)) {
+          $json = $_str.StartsWith([char]123) ? $_str : ([char]123 + $_str)
+          $data = $json | ConvertFrom-Json; [LocalSTT]::status.Process = $data.process; [LocalSTT]::status.PercentComplete = ($data.progress -ge 100) ? 100 : $data.progress; $et = [Timespan]::new(0, 0, $data.elapsed_time)
+          [progressUtil]::WriteProgressBar([LocalSTT]::status.PercentComplete, $true, 5, "(LocalSTT) ▶︎ $($data.process) •၊၊||၊|။||||။‌‌‌‌‌၊|• $($et.Minutes):$($et.Seconds)", $false)
+          [threading.Thread]::Sleep(200)
+        }
+      } while ([LocalSTT]::status.PercentComplete -ne 100)
     } catch {
-      Write-Host "Error receiving data: $($_.Exception.Message)"
+      Write-Host "`nError receiving data: $($_.Exception.Message)" -f Red
     } finally {
       [Console]::TreatControlCAsInput = $OgctrInput
       [LocalSTT]::recorder.Stop($pythonProcess.Id)
@@ -115,7 +121,7 @@ class LocalSTT {
     Write-Verbose "Found file @$(Invoke-PathShortener $req)"
     if (![LocalSTT]::status.HasConfig) { throw [InvalidOperationException]::new("LocalSTT config found.") };
     if ($_c.env.State -eq "Inactive") { $_c.env.Activate() }
-    Write-Console "(LocalSTT) " -f SlateBlue -NoNewLine; Write-Console "၊▹ Resolving requirements ... " -f LemonChiffon -NoNewLine -Animate
+    Write-Console "(LocalSTT) " -f SlateBlue -NoNewLine; Write-Console "▶︎ Resolving requirements ... " -f LemonChiffon -NoNewLine -Animate
     pip install -r $req
     Write-Console "Done" -f LimeGreen
     return $res
