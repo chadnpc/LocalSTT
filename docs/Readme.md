@@ -20,27 +20,17 @@ Current version uses
 ## Installation
 
 1. Ensure you have PowerShell 7 or later installed.
-2. Clone the LocalSTT repository:
+2. Install from powershell gallery
 
    ```powershell
-   git clone https://github.com/alainQtec/LocalSTT.git
+   Install-Module LocalSTT
    ```
-3. Navigate to the cloned directory:
-
-   ```powershell
-   cd LocalSTT
-   ```
+Thats it!
 
 The mdule will take care of installing the required Python dependencies and
 managing the virtual environments.
 
 pip requirements are stored in Private/requirements.txt
-
-4. Import the module:
-
-   ```powershell
-   Import-Module LocalSTT
-   ```
 
 ## Usage
 
