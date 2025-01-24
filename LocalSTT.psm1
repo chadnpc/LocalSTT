@@ -4,7 +4,7 @@ using namespace System.Net
 using namespace System.Net.Sockets
 using namespace System.Management.Automation
 
-#Requires -Modules  cliHelper.core, pipEnv
+#Requires -Modules cliHelper.core, pipEnv
 #Requires -Psedition Core
 
 #region    Classes
@@ -59,9 +59,10 @@ class AudioRecorder {
 class LocalSTT {
   static [AudioRecorder]$recorder
   static [hashtable]$status = [hashtable]::Synchronized(@{
-      Process = ''
+      Process         = ''
       HasConfig       = [LocalSTT]::HasConfig()
       IsRecording     = $false
+      HasRequirements = [LocalSTT]::ResolveRequirements()
       PercentComplete = 0
     }
   )
@@ -82,7 +83,7 @@ class LocalSTT {
     Write-Console "(LocalSTT) " -f SlateBlue -NoNewLine; Write-Console "▶︎ Recording server starting @ http://$([LocalSTT]::recorder.listener.LocalEndpoint) PID: $($pythonProcess.Id)" -f LemonChiffon;
     $OgctrInput = [Console]::TreatControlCAsInput;
     try {
-      $stream = [LocalSTT]::recorder.Start(); $buffer = [byte[]]::new(1024); $start_time = [datetime]::Now; [LocalSTT]::status.PercentComplete = 0;
+      $stream = [LocalSTT]::recorder.Start(); $buffer = [byte[]]::new(1024); [LocalSTT]::status.PercentComplete = 0;
       do {
         $bytesRead = $stream.Read($buffer, 0, $buffer.Length)
         if ([LocalSTT]::status.PercentComplete -ne 100 -and $bytesRead -le 0) { Write-Host "`nNo data was received from stt.py!" -f Red; break }
@@ -115,7 +116,9 @@ class LocalSTT {
   }
   static [bool] ResolveRequirements() {
     if ([LocalSTT]::status.IsRecording) { Write-Warning "LocalSTT is already recording." }
-    if ($null -ne [LocalSTT]::recorder) { [LocalSTT]::recorder.Stop() }; $_c = [LocalSTT].config
+    if ($null -ne [LocalSTT]::recorder) { [LocalSTT]::recorder.Stop() };
+    if ($null -eq [pipEnv]::data) { [pipEnv]::set_data() }
+    [void][pipEnv]::req.Resolve(); $_c = [LocalSTT].config
     $req = $_c.requirementsfile; $res = [IO.File]::Exists($req);
     if (!$res) { throw "LocalSTT failed to resolve pip requirements. From file: '$req'." }
     Write-Verbose "Found file @$(Invoke-PathShortener $req)"
@@ -147,7 +150,7 @@ class LocalSTT {
       backgroundScript = [IO.Path]::Combine($module_path, "Private", "stt.py")
       outFile          = [IO.Path]::Combine($current_path, "$(Get-Date -Format 'yyyyMMddHHmmss')_output.wav")
     } -as "PsRecord"
-    $c.PsObject.Properties.Add([PSScriptproperty]::New("env", { return [LocalSTT].config.workingDirectory | New-pipEnv }, { throw [SetValueException]::new("env is read-only") }))
+    $c.PsObject.Properties.Add([PSScriptproperty]::New("env", { $cwd = [LocalSTT].config.workingDirectory; $e = [pipEnv]::New(); $e = New-pipEnv $cwd; return [pipEnv]::env }, { throw [SetValueException]::new("env is read-only") }))
     $c.PsObject.Properties.Add([PSScriptproperty]::New("modulePath", [scriptblock]::Create("return `"$module_path`""), { throw [SetValueException]::new("modulePath is read-only") }))
     return $c
   }
