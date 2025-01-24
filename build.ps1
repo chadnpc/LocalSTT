@@ -1,7 +1,7 @@
 ﻿
 #!/usr/bin/env pwsh
 # .SYNOPSIS
-#   LocalSTT buildScript v0.1.2
+#   LocalSTT buildScript v0.1.3
 # .DESCRIPTION
 #   A custom build script for the module LocalSTT
 # .LINK
@@ -61,7 +61,7 @@ param(
 begin {
   if ($PSCmdlet.ParameterSetName -eq 'help') { Get-Help $MyInvocation.MyCommand.Source -Full | Out-String | Write-Host -f Green; return }
   $IsGithubRun = ![string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable('GITHUB_WORKFLOW'))
-  if ($($IsGithubRun ? $true : $(try { (Test-Connection "https://www.github.com" -Count 2 -TimeoutSeconds 1 -ea Ignore -Verbose:$false | Select-Object -expand Status) -contains "Success" } catch { Write-Warning "Test Connection Failed. $($_.Exception.Message)"; $false }))) {
+  if ($($IsGithubRun ? $true : $( $ping =  [System.Net.NetworkInformation.Ping]::new(); try { $reply = $ping.Send("github.com", 3000); $reply.Status -eq [System.Net.NetworkInformation.IPStatus]::Success } catch { $false }))) {
     $req = Invoke-WebRequest -Method Get -Uri https://raw.githubusercontent.com/alainQtec/PsCraft/refs/heads/main/Public/Build-Module.ps1 -SkipHttpErrorCheck -Verbose:$false
     if ($req.StatusCode -ne 200) { throw "Failed to download Build-Module.ps1" }
     $t = New-Item $([IO.Path]::GetTempFileName().Replace('.tmp', '.ps1')) -Verbose:$false; Set-Content -Path $t.FullName -Value $req.Content; . $t.FullName; Remove-Item $t.FullName -Verbose:$false
@@ -70,6 +70,7 @@ begin {
     $b = [IO.FileInfo][IO.Path]::Combine($m.InstalledLocation, 'Public', 'Build-Module.ps1')
     if ($b.Exists) { . $b.FullName }
   }
+  git config --global --add safe.directory $PSScriptRoot
 }
 process {
   Build-Module -Task $Task -Path $Path -Import:$Import

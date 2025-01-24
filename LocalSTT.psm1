@@ -4,7 +4,7 @@ using namespace System.Net
 using namespace System.Net.Sockets
 using namespace System.Management.Automation
 
-#Requires -Modules cliHelper.core, pipEnv
+#Requires -Modules  cliHelper.core, pipEnv
 #Requires -Psedition Core
 
 #region    Classes

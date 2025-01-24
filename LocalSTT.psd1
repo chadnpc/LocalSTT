@@ -11,7 +11,7 @@
   RootModule            = 'LocalSTT.psm1'
 
   # Version number of this module.
-  ModuleVersion         = '0.1.2'
+  ModuleVersion         = '0.1.3'
 
   # Supported PSEditions
   # CompatiblePSEditions = @()
@@ -50,7 +50,11 @@
   ProcessorArchitecture = 'None'
 
   # Modules that must be imported into the global environment prior to importing this module
-  RequiredModules       = @('PSScriptAnalyzer')
+  RequiredModules       = @(
+    'PSScriptAnalyzer'
+    'cliHelper.core'
+    'pipEnv'
+  )
 
   # Assemblies that must be loaded prior to importing this module
   # RequiredAssemblies = @()
@@ -108,7 +112,7 @@
       # ReleaseNotes of this module
       ReleaseNotes = '# Release Notes
 
-- Version_0.1.2
+- Version_0.1.3
 - Functions ...
 - Optimizations
 '
