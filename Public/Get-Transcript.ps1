@@ -7,10 +7,10 @@
   #   Author   : Alain Herve
   #   License  : MIT
   # .LINK
-  #   https://github.com/alainQtec/LocalSTT/blob/main/Public/Get-Transcript.ps1
+  #   https://github.com/chadnpc/LocalSTT/blob/main/Public/Get-Transcript.ps1
   # .EXAMPLE
   #   $txt = Get-Transcript ~/audio.wav
-  [CmdletBinding()][OutputType([string])]
+  [CmdletBinding()][OutputType([string])][Alias('Transcribe-Audio')]
   param (
     [Parameter(Mandatory = $true, Position = 0, ValueFromPipeline = $true)]
     [ValidateNotNullOrEmpty()]

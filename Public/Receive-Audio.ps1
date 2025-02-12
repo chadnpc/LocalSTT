@@ -4,7 +4,7 @@ function Receive-Audio {
   # .DESCRIPTION
   #   Records audio from the default microphone and saves it to a file.
   # .LINK
-  #   https://github.com/alainQtec/LocalSTT/blob/main/Public/Receive-Audio.ps1
+  #   https://github.com/chadnpc/LocalSTT/blob/main/Public/Receive-Audio.ps1
   # .EXAMPLE
   #   Record-Audio
   #   Saves audio to the current directory.

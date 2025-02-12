@@ -58,23 +58,22 @@ class AudioRecorder {
 #   https://pyaudio.readthedocs.io/en/stable/
 class LocalSTT {
   static [AudioRecorder]$recorder
-  static [hashtable]$status = [hashtable]::Synchronized(@{
-      Process         = ''
-      HasConfig       = [LocalSTT]::HasConfig()
-      IsRecording     = $false
-      HasRequirements = [LocalSTT]::ResolveRequirements()
-      PercentComplete = 0
-    }
-  )
+  static [hashtable]$status = @{
+    Process         = ''
+    HasConfig       = [LocalSTT]::HasConfig()
+    IsRecording     = $false
+    HasRequirements = [LocalSTT]::ResolveRequirements()
+    PercentComplete = 0
+  }
   LocalSTT() {}
 
   static [IO.Fileinfo] RecordAudio() { return [LocalSTT]::RecordAudio(3) }
 
   static [IO.Fileinfo] RecordAudio([float]$minutes) {
-    return [LocalSTT]::RecordAudio([LocalSTT].config.outFile, [Timespan]::new(0, 0, $minutes*60))
+    return [LocalSTT]::RecordAudio([LocalSTT].config.outFile, [Timespan]::new(0, 0, $minutes * 60))
   }
   static [IO.Fileinfo] RecordAudio([string]$outFile, [float]$minutes) {
-    return [LocalSTT]::RecordAudio($outFile, [Timespan]::new(0, 0, $minutes*60))
+    return [LocalSTT]::RecordAudio($outFile, [Timespan]::new(0, 0, $minutes * 60))
   }
   static [IO.Fileinfo] RecordAudio([string]$outFile, [Timespan]$duration) {
     [ValidateNotNullOrWhiteSpace()][string]$outFile = $outFile
@@ -115,15 +114,19 @@ class LocalSTT {
     return [IO.File]::ReadAllText($outFile)
   }
   static [bool] ResolveRequirements() {
-    if ([LocalSTT]::status.IsRecording) { Write-Warning "LocalSTT is already recording." }
-    if ($null -ne [LocalSTT]::recorder) { [LocalSTT]::recorder.Stop() };
-    if ($null -eq [pipEnv]::data) { [pipEnv]::set_data() }
-    [void][pipEnv]::req.Resolve(); $_c = [LocalSTT].config
-    $req = $_c.requirementsfile; $res = [IO.File]::Exists($req);
+    return [LocalSTT]::ResolveRequirements([switch]$false)
+  }
+  static [bool] ResolveRequirements([switch]$throwOnFail) {
+    if ([LocalSTT]::status.IsRecording) { Write-Warning "LocalSTT is already recording."; if ($null -ne [LocalSTT]::recorder) { [LocalSTT]::recorder.Stop() }; }
+    if ($null -eq [pipEnv]::data) { [pipEnv]::set_data() }; [void][pipEnv]::req.Resolve();
+    $req = [LocalSTT].config.requirementsfile; $res = [IO.File]::Exists($req);
     if (!$res) { throw "LocalSTT failed to resolve pip requirements. From file: '$req'." }
     Write-Verbose "Found file @$(Invoke-PathShortener $req)"
-    if (![LocalSTT]::status.HasConfig) { throw [InvalidOperationException]::new("LocalSTT config found.") };
-    if ($_c.env.State -eq "Inactive") { $_c.env.Activate() }
+    if (![LocalSTT]::HasConfig() -and $throwOnFail.IsPresent) { throw [InvalidOperationException]::new("LocalSTT config found.") };
+    if ($null -eq [LocalSTT].config.env) {
+      throw [InvalidOperationException]::new("LocalSTT env not created found.")
+    }
+    if ([LocalSTT].config.env.State -eq "Inactive") { [LocalSTT].config.env.Activate() }
     Write-Console "(LocalSTT) " -f SlateBlue -NoNewLine; Write-Console "▶︎ Resolving requirements ... " -f LemonChiffon -NoNewLine -Animate
     pip install -r $req
     Write-Console "Done" -f LimeGreen

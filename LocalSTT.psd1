@@ -11,7 +11,7 @@
   RootModule            = 'LocalSTT.psm1'
 
   # Version number of this module.
-  ModuleVersion         = '0.1.3'
+  ModuleVersion         = '0.1.4'
 
   # Supported PSEditions
   # CompatiblePSEditions = @()
@@ -104,7 +104,7 @@
       LicenseUri   = 'https://alain.mit-license.org/'
 
       # A URL to the main website for this project.
-      ProjectUri   = 'https://github.com/alainQtec/LocalSTT'
+      ProjectUri   = 'https://github.com/chadnpc/LocalSTT'
 
       # A URL to an icon representing this module.
       IconUri      = 'https://github.com/user-attachments/assets/1220c30e-a309-43c3-9a80-1948dae30e09'
@@ -112,7 +112,7 @@
       # ReleaseNotes of this module
       ReleaseNotes = '# Release Notes
 
-- Version_0.1.3
+- Version_0.1.4
 - Functions ...
 - Optimizations
 '
