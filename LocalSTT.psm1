@@ -71,9 +71,13 @@ class LocalSTT {
   }
   static [IO.Fileinfo] RecordAudio([string]$outFile, [Timespan]$duration) {
     [ValidateNotNullOrWhiteSpace()][string]$outFile = $outFile
-    [void][LocalSTT]::ResolveRequirements(); $_c = [LocalSTT].config; [LocalSTT]::recorder = [AudioRecorder]::New([TcpListener]::new([IPEndpoint]::new([IPAddress]$_c.host, $_c.port)), [IO.FileInfo]::New($outFile)); $dir = $_c.workingDirectory
-    $pythonProcess = Start-Process -FilePath "python" -ArgumentList "$($_c.Script) --host `"$($_c.host)`" --port $($_c.port) --amplify-rate $($_c.amplifyRate) --outfile `"$outFile`" --duration-in-minutes=$($duration.TotalMinutes) --working-directory `"$dir`"" -WorkingDirectory $dir -PassThru -NoNewWindow
-    Write-Console "(LocalSTT) " -f SlateBlue -NoNewLine; Write-Console "▶︎ Recording server starting @ http://$([LocalSTT]::recorder.listener.LocalEndpoint) PID: $($pythonProcess.Id)" -f LemonChiffon;
+    if ([LocalSTT]::IsFirstRun()) { [void][LocalSTT]::ResolveRequirements() };
+    if ([LocalSTT]::data.Env.State -eq "inactive") {
+      [LocalSTT]::data.Env.Activate()
+    }
+    $_c = [LocalSTT].config; [LocalSTT]::recorder = [AudioRecorder]::New([TcpListener]::new([IPEndpoint]::new([IPAddress]$_c.Stt.host, $_c.Stt.port)), [IO.FileInfo]::New($outFile)); $dir = $_c.Stt.workingDirectory
+    [LocalSTT]::data.Process = Start-Process -FilePath "python" -ArgumentList "$($_c.Stt.Script) --host `"$($_c.Stt.host)`" --port $($_c.Stt.port) --amplify-rate $($_c.Stt.amplifyRate) --outfile `"$outFile`" --duration-in-minutes=$($duration.TotalMinutes) --working-directory `"$dir`"" -WorkingDirectory $dir -PassThru -NoNewWindow
+    Write-Console "(LocalSTT) " -f SlateBlue -NoNewLine; Write-Console "▶︎ Recording server starting @ http://$([LocalSTT]::recorder.listener.LocalEndpoint) PID: $([LocalSTT]::data.Process.Id)" -f LemonChiffon;
     $OgctrInput = [Console]::TreatControlCAsInput;
     try {
       $stream = [LocalSTT]::recorder.Start(); $buffer = [byte[]]::new(1024); [LocalSTT]::data.PercentComplete = 0;
@@ -92,7 +96,7 @@ class LocalSTT {
       Write-Console "`nError receiving data: $($_.Exception.Message)" -f LightCoral
     } finally {
       [Console]::TreatControlCAsInput = $OgctrInput
-      [LocalSTT]::recorder.Stop($pythonProcess.Id)
+      [LocalSTT]::recorder.Stop([LocalSTT]::data.Process.Id)
     }
     return [LocalSTT]::recorder.outFile
   }
@@ -100,35 +104,42 @@ class LocalSTT {
     [ValidateNotNullOrEmpty()][IO.FileInfo]$InputAudio = $InputAudio;
     [string]$inputFile = $InputAudio.FullName;
     if (!$InputAudio.Exists) { throw [FileNotFoundException]::New("Could Not Find Audio File $inputFile") }
-    [void][LocalSTT]::ResolveRequirements(); $_c = [LocalSTT].config;
-    $_t = [IO.Path]::Combine(($_c.Script | Split-Path), "transcribe.py"); $dir = $_c.workingDirectory
+    if ([LocalSTT]::IsFirstRun()) { [void][LocalSTT]::ResolveRequirements() }
+    if ([LocalSTT]::data.Env.State -eq "inactive") {
+      [LocalSTT]::data.Env.Activate()
+    }
+    $_c = [LocalSTT].config;
+    $_t = [IO.Path]::Combine(($_c.Stt.Script | Split-Path), "transcribe.py"); $dir = $_c.Stt.workingDirectory
     $Process = Start-Process -FilePath "python" -ArgumentList "$_t --inputfile `"$inputFile`" --outfile `"$outFile`" --working-directory `"$dir`"" -WorkingDirectory $dir -PassThru -NoNewWindow;
     $Process.WaitForExit()
     $process.Kill(); $Process.Dispose()
     return [IO.File]::ReadAllText($outFile)
   }
   static [bool] ResolveRequirements() {
-    return [LocalSTT]::ResolveRequirements([switch]$false)
+    return [LocalSTT]::ResolveRequirements([LocalSTT]::data.Stt.requirementsfile, [LocalSTT]::data, [switch]$false)
   }
-  static [bool] ResolveRequirements([switch]$throwOnFail) {
-    if ([LocalSTT]::data.IsRecording) { Write-Warning "LocalSTT is already recording."; if ($null -ne [LocalSTT]::recorder) { [LocalSTT]::recorder.Stop() }; }
-    if ($null -eq [venv]::data) { [venv]::set_data() }; [void][venv]::req.Resolve(); $v = (Get-Variable 'VerbosePreference' -ValueOnly) -eq 'Continue'
-    $req = [LocalSTT]::data.Stt.requirementsfile; $res = [IO.File]::Exists($req);
-    $_rp = Invoke-PathShortener $req
-    if (!$res) { throw "LocalSTT failed to resolve pip requirements. From file: '$_rp'." }
-    $v ? $(Write-Console "(LocalSTT) " -f SlateBlue -NoNewLine; Write-Console "▶︎ Found file @ /$_rp" -f LemonChiffon) : $null
-    if (![LocalSTT]::data.HasConfig -and $throwOnFail.IsPresent) { throw [InvalidOperationException]::new("LocalSTT config found.") };
-    if ($null -eq [LocalSTT]::data.CurrentEnv) {
+  static [bool] ResolveRequirements([string]$req_txt, [PsRecord]$config, [switch]$throwOnFail) {
+    if ($config.IsRecording) { Write-Warning "LocalSTT is already recording."; if ($null -ne [LocalSTT]::recorder) { [LocalSTT]::recorder.Stop() }; }
+    $v = (Get-Variable 'VerbosePreference' -ValueOnly) -eq 'Continue'
+    $res = [IO.File]::Exists($req_txt); $req_txt_short_path = Invoke-PathShortener $req_txt
+    if (!$res) { throw "LocalSTT failed to resolve pip requirements. From file: '$req_txt_short_path'." }
+    if (!$config.Env::req.resolved) { $config.Env::req.Resolve() }
+    $v ? $(Write-Console "(LocalSTT) " -f SlateBlue -NoNewLine; Write-Console "▶︎ Found file @ /$req_txt_short_path" -f LemonChiffon) : $null
+    if (!$config.HasConfig -and $throwOnFail.IsPresent) { throw [InvalidOperationException]::new("LocalSTT config found.") };
+    if ($null -eq $config.Env) {
       throw [InvalidOperationException]::new("No created env was found.")
     }
-    if ([LocalSTT]::data.CurrentEnv.State -eq "Inactive") { [LocalSTT]::data.CurrentEnv.Activate() }
+    $was_inactive = ($config.Env.State -eq "inactive") ? $([void]$config.Env.Activate(); $true) : $false
     $v ? $(Write-Console "(LocalSTT) " -f SlateBlue -NoNewLine; Write-Console "▶︎ Resolve requirements: " -f LemonChiffon -Animate) : $null
-    [LocalSTT]::data.CurrentEnv.Activate()
-    $s = [scriptblock]::Create("pip install -r '$req'")
-    $j = [progressUtil]::WaitJob("(LocalSTT)   pip install -r $_rp", $s)
-    $r = $j | Receive-Job
+    $s = [scriptblock]::Create("pip install -r '$req_txt'")
+    $j = [progressUtil]::WaitJob("(LocalSTT)   pip install -r $req_txt_short_path", $s)
+    $r = $j | Receive-Job; $has_no_err = $j.Error.Count -gt 0
+    $j.Dispose(); if ($was_inactive) { $config.Env.Deactivate() }
     if ($v) { $r | Out-String | Write-Console -f DarkSlateGray }
-    return $res
+    return $res -and $has_no_err
+  }
+  static [bool] IsFirstRun() {
+    return $null -eq ([LocalSTT] | Get-Member -Name config -Type ScriptProperty)
   }
   static [PsRecord] GetSttConfig() {
     return [LocalSTT]::GetSttConfig((Resolve-Path .).Path)
@@ -136,23 +147,16 @@ class LocalSTT {
   static [PsRecord] GetSttConfig([string]$current_path) {
     # .DESCRIPTION
     #   Load stt configuration from json or toml file
+    $1strun = [LocalSTT]::IsFirstRun()
     $mdpath = (Get-Module LocalSTT -ListAvailable -Verbose:$false).ModuleBase
     $config = [PsRecord]@{
       Stt             = $null
+      Env             = $null
       Process         = ''
-      HasConfig       = $false
-      CurrentEnv      = $null
+      HasConfig       = $true
       IsRecording     = $false
       PercentComplete = 0
     }
-    $config.PsObject.Properties.Add([PSScriptproperty]::New("HasRequirements", {
-          if ([LocalSTT]::data) { return [LocalSTT]::ResolveRequirements() }; return $false
-        }, {
-          throw [SetValueException]::new("HasRequirements is read-only")
-        }
-      )
-    )
-    # Set default config values
     $config.Stt = [PsRecord]@{
       port             = 65432
       host             = "127.0.0.1"
@@ -167,7 +171,7 @@ class LocalSTT {
         }
       )
     )
-    if ($null -eq ([LocalSTT] | Get-Member -Name config -Type ScriptProperty)) {
+    if ($1strun) {
       [LocalSTT].PsObject.Properties.Add([PSScriptproperty]::New("config", {
             return [LocalSTT]::GetSttConfig() }, {
             throw [SetValueException]::new("config can only be imported or edited")
@@ -175,8 +179,10 @@ class LocalSTT {
         )
       )
     }
-    $config.CurrentEnv = New-venv -Path $current_path -Verbose:$false
-    $config.HasConfig = $null -ne $config
+    $config.Env = New-venv -Path $current_path -Verbose:$false
+    if ($1strun) {
+      $config.Set('HasRequirements', [LocalSTT]::ResolveRequirements($config.Stt.requirementsfile, $config, $false))
+    }
     return $config
   }
 }
