@@ -1,6 +1,6 @@
 ﻿# [LocalStt ၊▹](https://www.powershellgallery.com/packages/LocalSTT)
 
-A module for speech to text & transcription stuff without leaving your terminal.
+A module for speech to text & transcription stuff.
 
 Core modules:
 
