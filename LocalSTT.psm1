@@ -47,6 +47,16 @@ class AudioRecorder {
   }
 }
 
+class SttErrorLog : PSDataCollection[ErrorRecord] {
+  SttErrorLog() : base() {}
+  [void] Export([string]$jsonPath) {
+    $this | ConvertTo-Json -Depth 10 | Out-File -FilePath $jsonPath -Encoding UTF8
+  }
+  [string] ToString() {
+    return ($this.count -ge 0) ? ('@()') : ''
+  }
+}
+
 # .SYNOPSIS
 #   Local Speech to text powershell module
 # .DESCRIPTION
@@ -59,8 +69,8 @@ class AudioRecorder {
 #   https://pyaudio.readthedocs.io/en/stable/
 class LocalSTT {
   static [AudioRecorder] $recorder
+  static [SttErrorLog] $ErrorLog = [SttErrorLog]::New()
   static [PsRecord]$data = [LocalSTT]::GetSttData()
-  static [Dictionary[ErrorMetadata, ErrorRecord[]]] $Errors = @{}
   LocalSTT() {}
 
   static [IO.Fileinfo] RecordAudio() { return [LocalSTT]::RecordAudio(3) }
@@ -118,34 +128,47 @@ class LocalSTT {
     return [IO.File]::ReadAllText($outFile)
   }
   static [bool] ResolveRequirements() {
-    return [LocalSTT]::ResolveRequirements([LocalSTT]::data.Stt.requirementsfile, [LocalSTT]::data, [switch]$false)
+    return [LocalSTT]::ResolveRequirements([LocalSTT]::data.Stt.requirementsfile, [LocalSTT]::data, $false)
   }
-  static [bool] ResolveRequirements([string]$req_txt, [PsRecord]$config, [switch]$throwOnFail) {
+  static [bool] ResolveRequirements([string]$req_txt, [PsRecord]$config, [bool]$throwOnFail) {
     if ($config.IsRecording) { Write-Warning "LocalSTT is already recording."; if ($null -ne [LocalSTT]::recorder) { [LocalSTT]::recorder.Stop() }; }
     $v = (Get-Variable 'VerbosePreference' -ValueOnly) -eq 'Continue'
     $res = [IO.File]::Exists($req_txt); $req_txt_short_path = Invoke-PathShortener $req_txt
     if (!$res) { throw "LocalSTT failed to resolve pip requirements. From file: '$req_txt_short_path'." }
     if (!$config.Env::req.resolved) { $config.Env::req.Resolve() }
     $v ? $(Write-Console "(LocalSTT) " -f SlateBlue -NoNewLine; Write-Console "▶︎ Found file @ /$req_txt_short_path" -f LemonChiffon) : $null
-    if (!$config.HasConfig -and $throwOnFail.IsPresent) { throw [InvalidOperationException]::new("LocalSTT config found.") };
+    if (!$config.HasConfig -and $throwOnFail) { throw [InvalidOperationException]::new("LocalSTT config found.") };
     if ($null -eq $config.Env) {
       throw [InvalidOperationException]::new("No created env was found.")
     }
     $was_inactive = ($config.Env.State -eq "inactive") ? $([void]$config.Env.Activate(); $true) : $false
     $v ? $(Write-Console "(LocalSTT) " -f SlateBlue -NoNewLine; Write-Console "▶︎ Resolve requirements: " -f LemonChiffon -Animate) : $null
     $s = [scriptblock]::Create("pip install -r '$req_txt'")
-    $j = [progressUtil]::WaitJob("(LocalSTT)   pip install -r $req_txt_short_path", $s); [LocalSTT]::Errors += $j.Error
+    $j = [progressUtil]::WaitJob("(LocalSTT)   pip install -r $req_txt_short_path", $s);
+    [LocalSTT]::WriteError($j.Error, [ErrorMetadata]@{
+        IsPrinted      = $false
+        Timestamp      = [DateTime]::Now
+        User           = $env:USER
+        Module         = "LocalSTT"
+        AdditionalInfo = "pip install -r '$req_txt'"
+      }, $throwOnFail)
     $r = $j | Receive-Job; $j.Dispose();
     if ($was_inactive) { $config.Env.Deactivate() }
     if ($v) { $r | Out-String | Write-Console -f DarkSlateGray }
-    if ([LocalSTT]::Errors.count -gt 0) { $throwOnFail.IsPresent ? (throw [LocalSTT]::Errors) : ([LocalSTT]::Errors | Out-String | Write-Console -f LightCoral) }
-    return $res -and ([LocalSTT]::Errors.count -eq 0)
+    return $res -and ([LocalSTT]::ErrorLog.count -eq 0)
   }
   static [bool] IsFirstRun() {
     return $null -eq ([LocalSTT] | Get-Member -Name config -Type ScriptProperty)
   }
   static [PsRecord] GetSttData() {
-    return [LocalSTT]::GetSttData((Resolve-Path .).Path)
+    $d = $null
+    try {
+      $d = [LocalSTT]::GetSttData((Resolve-Path .).Path)
+    } catch {
+      "Failed to Load stt data" | Write-Console -f LightCoral
+      $_ | Format-List * -Force | Out-String | Write-Console -f LightCoral
+    }
+    return $d
   }
   static [PsRecord] GetSttData([string]$current_path) {
     # .DESCRIPTION
@@ -188,12 +211,31 @@ class LocalSTT {
     }
     return $config
   }
+  static [void] WriteError([PSDataCollection[ErrorRecord]]$err0r) {
+    [LocalSTT]::WriteError($err0r, @{})
+  }
+  static [void] WriteError([PSDataCollection[ErrorRecord]]$err0r, [ErrorMetadata]$metadata) {
+    [LocalSTT]::WriteError($err0r, $metadata, $false)
+  }
+  static [void] WriteError([PSDataCollection[ErrorRecord]]$err0r, [ErrorMetadata]$metadata, [bool]$throw) {
+    if ($null -eq $err0r) { return } # log/record the error
+    ![LocalSTT]::ErrorLog ? ([LocalSTT]::ErrorLog = [SttErrorLog]::New()) : $null;
+    # we first log everything
+    $err0r.ForEach({
+        $metadata.IsPrinted = !$throw
+        $_.PsObject.Properties.Add([psnoteproperty]::New("Metadata", $metadata))
+        [void][LocalSTT]::ErrorLog.Add($_)
+      }
+    )
+    # "simple printf" or Write-TerminatingError
+    $throw ? (throw $err0r) : ($err0r | Out-String | Write-Console -f LightCoral)
+  }
 }
 
 #endregion Classes
 # Types that will be available to users when they import the module.
 $typestoExport = @(
-  [LocalSTT]
+  [LocalSTT], [SttErrorLog], [AudioRecorder]
 )
 $TypeAcceleratorsClass = [PsObject].Assembly.GetType('System.Management.Automation.TypeAccelerators')
 foreach ($Type in $typestoExport) {
