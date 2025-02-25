@@ -2,6 +2,7 @@
 using namespace System.IO
 using namespace System.Net
 using namespace System.Net.Sockets
+using namespace System.Collections.Generic
 using namespace System.Management.Automation
 
 #Requires -Modules cliHelper.core, cliHelper.errorman, pipEnv
@@ -59,7 +60,7 @@ class AudioRecorder {
 class LocalSTT {
   static [AudioRecorder] $recorder
   static [PsRecord]$data = [LocalSTT]::GetSttData()
-  static [ErrorDictionary] $Errors = @{}
+  static [Dictionary[ErrorMetadata, ErrorRecord[]]] $Errors = @{}
   LocalSTT() {}
 
   static [IO.Fileinfo] RecordAudio() { return [LocalSTT]::RecordAudio(3) }
