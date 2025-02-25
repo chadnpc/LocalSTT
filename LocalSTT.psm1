@@ -57,6 +57,28 @@ class SttErrorLog : PSDataCollection[ErrorRecord] {
   }
 }
 
+class PyenvHelper {
+  PyenvHelper() {}
+  static [void] useversion([string]$ver) {
+    [PyenvHelper]::useversion([version]::new($ver), [ref][LocalSTT]::data)
+  }
+  static [void] useversion([version]$ver, [ref]$config) {
+    [version]$current_ver = [PyenvHelper]::get_python_version()
+    if ($current_ver -lt $ver) {
+      Write-Console "Installing Python v$ver..." -f SlateBlue
+      pyenv install $ver.ToString()
+    }
+    pyenv local "$ver"
+    $config.Value.Env.PythonVersion = $ver
+    if ($current_ver -ne $ver) {
+      throw [InvalidOperationException]::new("Failed to set Python version to $ver")
+    }
+  }
+  static [version] get_python_version() {
+    return [version]::new((python --version).Split(" ")[1])
+  }
+}
+
 # .SYNOPSIS
 #   Local Speech to text powershell module
 # .DESCRIPTION
@@ -172,7 +194,7 @@ class LocalSTT {
   static [PsRecord] GetSttData([string]$current_path) {
     # .DESCRIPTION
     #   Load stt configuration from json or toml file
-    $1strun = [LocalSTT]::IsFirstRun(); $v = (Get-Variable 'VerbosePreference' -ValueOnly) -eq 'Continue'
+    $1strun = [LocalSTT]::IsFirstRun();
     $mdpath = (Get-Module LocalSTT -ListAvailable -Verbose:$false).ModuleBase
     $config = [PsRecord]@{
       Stt             = $null
@@ -206,31 +228,12 @@ class LocalSTT {
       )
     }
     $config.Env = New-venv -Path $current_path -Verbose:$false
-    # $m = "Set local python version to $($config.PythonVersion)"
-    # $j = [progressUtil]::WaitJob($m, { param($c) return [LocalSTT]::use_python_version($c.PythonVersion, $c) }, $config);
-    # [LocalSTT]::LogErrors($j.Error, $m);
-    # $r = $j | Receive-Job; $j.Dispose();
-    # if ($v) { $r | Out-String | Write-Console -f DarkSlateGray }
+    $m = "(LocalSTT)   Set local python version to $($config.PythonVersion)"
+    $j = [progressUtil]::WaitJob($m, { param($c) [PyenvHelper]::useversion($c.PythonVersion, $c) }, $config)
+    [LocalSTT]::LogErrors($j.Error, $m); $r = $j | Receive-Job; $j.Dispose()
+    if ((Get-Variable 'VerbosePreference' -ValueOnly) -eq 'Continue') { ($r | Out-String) + ' ' | Write-Console -f DarkSlateGray }
     $config.HasRequirements = $1strun ? [LocalSTT]::ResolveRequirements($config.Stt.requirementsfile, $config, $false) : $false
     return $config
-  }
-  static hidden [void] use_python_version([string]$ver) {
-    [LocalSTT]::use_python_version([version]::new($ver), [ref][LocalSTT]::data)
-  }
-  static hidden [void] use_python_version([version]$ver, [ref]$config) {
-    [version]$current_ver = [LocalSTT]::get_python_version()
-    if ($current_ver -lt $ver) {
-      Write-Console "Installing Python v$ver..." -f SlateBlue
-      pyenv install $ver.ToString()
-    }
-    pyenv local "$ver"
-    $config.Value.Env.PythonVersion = $ver
-    if ($current_ver -ne $ver) {
-      throw [InvalidOperationException]::new("Failed to set Python version to $ver")
-    }
-  }
-  static hidden [version] get_python_version() {
-    return [version]::new((python --version).Split(" ")[1])
   }
   static hidden [void] LogErrors([PSDataCollection[ErrorRecord]]$err0r) {
     [LocalSTT]::LogErrors($err0r, [string]::Empty)
@@ -248,7 +251,7 @@ class LocalSTT {
     [LocalSTT]::LogErrors($err0r, $metadata, $false)
   }
   static hidden [void] LogErrors([PSDataCollection[ErrorRecord]]$err0r, [ErrorMetadata]$metadata, [bool]$throw) {
-    if ($null -eq $err0r) { return } # log/record the error
+    if ($err0r.count -eq 0) { return } # log/record the error
     ![LocalSTT]::ErrorLog ? ([LocalSTT]::ErrorLog = [SttErrorLog]::New()) : $null;
     $err0r.ForEach({
         $metadata.IsPrinted = !$throw
@@ -257,14 +260,14 @@ class LocalSTT {
       }
     )
     # "simple printf" or Write-TerminatingError
-    $throw ? (throw $err0r) : ($err0r | Out-String | Write-Console -f LightCoral)
+    $throw ? (throw $err0r) : $($err0r | Out-String | Write-Console -f LightCoral)
   }
 }
 
 #endregion Classes
 # Types that will be available to users when they import the module.
 $typestoExport = @(
-  [LocalSTT], [SttErrorLog], [AudioRecorder]
+  [LocalSTT], [SttErrorLog], [AudioRecorder], [PyenvHelper]
 )
 $TypeAcceleratorsClass = [PsObject].Assembly.GetType('System.Management.Automation.TypeAccelerators')
 foreach ($Type in $typestoExport) {
