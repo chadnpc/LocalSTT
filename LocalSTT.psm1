@@ -137,7 +137,7 @@ class LocalSTT {
     if (!$res) { throw "LocalSTT failed to resolve pip requirements. From file: '$req_txt_short_path'." }
     if (!$config.Env::req.resolved) { $config.Env::req.Resolve() }
     $v ? $(Write-Console "(LocalSTT) " -f SlateBlue -NoNewLine; Write-Console "▶︎ Found file @ /$req_txt_short_path" -f LemonChiffon) : $null
-    if (!$config.HasConfig -and $throwOnFail) { throw [InvalidOperationException]::new("LocalSTT config found.") };
+    if ($null -eq $config -and $throwOnFail) { throw [InvalidOperationException]::new("LocalSTT config found.") };
     if ($null -eq $config.Env) {
       throw [InvalidOperationException]::new("No created env was found.")
     }
@@ -145,8 +145,7 @@ class LocalSTT {
     $v ? $(Write-Console "(LocalSTT) " -f SlateBlue -NoNewLine; Write-Console "▶︎ Resolve requirements: " -f LemonChiffon -Animate) : $null
     $s = [scriptblock]::Create("pip install -r '$req_txt'")
     $j = [progressUtil]::WaitJob("(LocalSTT)   pip install -r $req_txt_short_path", $s);
-    [LocalSTT]::WriteError($j.Error, [ErrorMetadata]@{
-        IsPrinted      = $false
+    [LocalSTT]::LogErrors($j.Error, [ErrorMetadata]@{
         Timestamp      = [DateTime]::Now
         User           = $env:USER
         Module         = "LocalSTT"
@@ -173,14 +172,15 @@ class LocalSTT {
   static [PsRecord] GetSttData([string]$current_path) {
     # .DESCRIPTION
     #   Load stt configuration from json or toml file
-    $1strun = [LocalSTT]::IsFirstRun()
+    $1strun = [LocalSTT]::IsFirstRun(); $v = (Get-Variable 'VerbosePreference' -ValueOnly) -eq 'Continue'
     $mdpath = (Get-Module LocalSTT -ListAvailable -Verbose:$false).ModuleBase
     $config = [PsRecord]@{
       Stt             = $null
       Env             = $null
       Process         = ''
-      HasConfig       = $true
       IsRecording     = $false
+      PythonVersion   = [version]'3.12.9'
+      HasRequirements = $false
       PercentComplete = 0
     }
     $config.Stt = [PsRecord]@{
@@ -206,21 +206,50 @@ class LocalSTT {
       )
     }
     $config.Env = New-venv -Path $current_path -Verbose:$false
-    if ($1strun) {
-      $config.Set('HasRequirements', [LocalSTT]::ResolveRequirements($config.Stt.requirementsfile, $config, $false))
-    }
+    # $m = "Set local python version to $($config.PythonVersion)"
+    # $j = [progressUtil]::WaitJob($m, { param($c) return [LocalSTT]::use_python_version($c.PythonVersion, $c) }, $config);
+    # [LocalSTT]::LogErrors($j.Error, $m);
+    # $r = $j | Receive-Job; $j.Dispose();
+    # if ($v) { $r | Out-String | Write-Console -f DarkSlateGray }
+    $config.HasRequirements = $1strun ? [LocalSTT]::ResolveRequirements($config.Stt.requirementsfile, $config, $false) : $false
     return $config
   }
-  static [void] WriteError([PSDataCollection[ErrorRecord]]$err0r) {
-    [LocalSTT]::WriteError($err0r, @{})
+  static hidden [void] use_python_version([string]$ver) {
+    [LocalSTT]::use_python_version([version]::new($ver), [ref][LocalSTT]::data)
   }
-  static [void] WriteError([PSDataCollection[ErrorRecord]]$err0r, [ErrorMetadata]$metadata) {
-    [LocalSTT]::WriteError($err0r, $metadata, $false)
+  static hidden [void] use_python_version([version]$ver, [ref]$config) {
+    [version]$current_ver = [LocalSTT]::get_python_version()
+    if ($current_ver -lt $ver) {
+      Write-Console "Installing Python v$ver..." -f SlateBlue
+      pyenv install $ver.ToString()
+    }
+    pyenv local "$ver"
+    $config.Value.Env.PythonVersion = $ver
+    if ($current_ver -ne $ver) {
+      throw [InvalidOperationException]::new("Failed to set Python version to $ver")
+    }
   }
-  static [void] WriteError([PSDataCollection[ErrorRecord]]$err0r, [ErrorMetadata]$metadata, [bool]$throw) {
+  static hidden [version] get_python_version() {
+    return [version]::new((python --version).Split(" ")[1])
+  }
+  static hidden [void] LogErrors([PSDataCollection[ErrorRecord]]$err0r) {
+    [LocalSTT]::LogErrors($err0r, [string]::Empty)
+  }
+  static hidden [void] LogErrors([PSDataCollection[ErrorRecord]]$err0r, [string]$MoreInfo) {
+    [LocalSTT]::LogErrors($err0r, @{
+        Timestamp      = [DateTime]::Now
+        User           = $env:USER
+        Module         = "LocalSTT"
+        AdditionalInfo = $MoreInfo
+      }
+    )
+  }
+  static hidden [void] LogErrors([PSDataCollection[ErrorRecord]]$err0r, [ErrorMetadata]$metadata) {
+    [LocalSTT]::LogErrors($err0r, $metadata, $false)
+  }
+  static hidden [void] LogErrors([PSDataCollection[ErrorRecord]]$err0r, [ErrorMetadata]$metadata, [bool]$throw) {
     if ($null -eq $err0r) { return } # log/record the error
     ![LocalSTT]::ErrorLog ? ([LocalSTT]::ErrorLog = [SttErrorLog]::New()) : $null;
-    # we first log everything
     $err0r.ForEach({
         $metadata.IsPrinted = !$throw
         $_.PsObject.Properties.Add([psnoteproperty]::New("Metadata", $metadata))
@@ -265,7 +294,7 @@ foreach ($file in $scripts) {
     . "$($file.fullname)"
   } Catch {
     Write-Warning "Failed to import function $($file.BaseName): $_"
-    $host.UI.WriteErrorLine($_)
+    $host.UI.LogErrorsLine($_)
   }
 }
 
