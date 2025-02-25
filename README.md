@@ -27,6 +27,11 @@ Record-Audio -o output.wav
 Transcribe-Audio output.wav
 ```
 
+
+## NOTES
+
+- currently Works with Python <= 3.12 : [faster-whisper/issues/1238](https://github.com/SYSTRAN/faster-whisper/issues/1238)
+
 ## [🧾 License](LICENSE)
 
 This project is licensed under the [WTFPL License](LICENSE).
