@@ -4,7 +4,7 @@ using namespace System.Net
 using namespace System.Net.Sockets
 using namespace System.Management.Automation
 
-#Requires -Modules cliHelper.core, pipEnv
+#Requires -Modules cliHelper.core, cliHelper.errorman, pipEnv
 #Requires -Psedition Core
 
 #region    Classes
@@ -58,7 +58,8 @@ class AudioRecorder {
 #   https://pyaudio.readthedocs.io/en/stable/
 class LocalSTT {
   static [AudioRecorder] $recorder
-  static [PsRecord]$data = [LocalSTT]::GetSttConfig()
+  static [PsRecord]$data = [LocalSTT]::GetSttData()
+  static [ErrorDictionary] $Errors = @{}
   LocalSTT() {}
 
   static [IO.Fileinfo] RecordAudio() { return [LocalSTT]::RecordAudio(3) }
@@ -132,19 +133,20 @@ class LocalSTT {
     $was_inactive = ($config.Env.State -eq "inactive") ? $([void]$config.Env.Activate(); $true) : $false
     $v ? $(Write-Console "(LocalSTT) " -f SlateBlue -NoNewLine; Write-Console "▶︎ Resolve requirements: " -f LemonChiffon -Animate) : $null
     $s = [scriptblock]::Create("pip install -r '$req_txt'")
-    $j = [progressUtil]::WaitJob("(LocalSTT)   pip install -r $req_txt_short_path", $s)
-    $r = $j | Receive-Job; $has_no_err = $j.Error.Count -gt 0
-    $j.Dispose(); if ($was_inactive) { $config.Env.Deactivate() }
+    $j = [progressUtil]::WaitJob("(LocalSTT)   pip install -r $req_txt_short_path", $s); [LocalSTT]::Errors += $j.Error
+    $r = $j | Receive-Job; $j.Dispose();
+    if ($was_inactive) { $config.Env.Deactivate() }
     if ($v) { $r | Out-String | Write-Console -f DarkSlateGray }
-    return $res -and $has_no_err
+    if ([LocalSTT]::Errors.count -gt 0) { $throwOnFail.IsPresent ? (throw [LocalSTT]::Errors) : ([LocalSTT]::Errors | Out-String | Write-Console -f LightCoral) }
+    return $res -and ([LocalSTT]::Errors.count -eq 0)
   }
   static [bool] IsFirstRun() {
     return $null -eq ([LocalSTT] | Get-Member -Name config -Type ScriptProperty)
   }
-  static [PsRecord] GetSttConfig() {
-    return [LocalSTT]::GetSttConfig((Resolve-Path .).Path)
+  static [PsRecord] GetSttData() {
+    return [LocalSTT]::GetSttData((Resolve-Path .).Path)
   }
-  static [PsRecord] GetSttConfig([string]$current_path) {
+  static [PsRecord] GetSttData([string]$current_path) {
     # .DESCRIPTION
     #   Load stt configuration from json or toml file
     $1strun = [LocalSTT]::IsFirstRun()
@@ -173,7 +175,7 @@ class LocalSTT {
     )
     if ($1strun) {
       [LocalSTT].PsObject.Properties.Add([PSScriptproperty]::New("config", {
-            return [LocalSTT]::GetSttConfig() }, {
+            return [LocalSTT]::GetSttData() }, {
             throw [SetValueException]::new("config can only be imported or edited")
           }
         )
