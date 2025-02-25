@@ -167,13 +167,16 @@ class LocalSTT {
     $v ? $(Write-Console "(LocalSTT) " -f SlateBlue -NoNewLine; Write-Console "▶︎ Resolve requirements: " -f LemonChiffon -Animate) : $null
     $s = [scriptblock]::Create("pip install -r '$req_txt'")
     $j = [progressUtil]::WaitJob("(LocalSTT)   pip install -r $req_txt_short_path", $s);
-    [LocalSTT]::LogErrors($j.Error, [ErrorMetadata]@{
+    $e = [PSDataCollection[ErrorRecord]]::new(); $j.Error.ForEach({ $e.Add($_) })
+    $r = $j | Receive-Job -ErrorVariable threadErrors; $j.Dispose()
+    (Get-Variable threadErrors).Value.ForEach({ $e.Add($_) });
+    [LocalSTT]::LogErrors($e, [ErrorMetadata]@{
         Timestamp      = [DateTime]::Now
         User           = $env:USER
         Module         = "LocalSTT"
         AdditionalInfo = "pip install -r '$req_txt'"
       }, $throwOnFail)
-    $r = $j | Receive-Job; $j.Dispose();
+    $j.Dispose();
     if ($was_inactive) { $config.Env.Deactivate() }
     if ($v) { $r | Out-String | Write-Console -f DarkSlateGray }
     return $res -and ([LocalSTT]::ErrorLog.count -eq 0)
@@ -230,7 +233,9 @@ class LocalSTT {
     $config.Env = New-venv -Path $current_path -Verbose:$false
     $m = "(LocalSTT)   Set local python version to $($config.PythonVersion)"
     $j = [progressUtil]::WaitJob($m, { param($c) [PyenvHelper]::useversion($c.PythonVersion, $c) }, $config)
-    [LocalSTT]::LogErrors($j.Error, $m); $r = $j | Receive-Job; $j.Dispose()
+    $e = [PSDataCollection[ErrorRecord]]::new(); $j.Error.ForEach({ $e.Add($_) })
+    $r = $j | Receive-Job -ErrorVariable threadErrors; $j.Dispose()
+    (Get-Variable threadErrors).Value.ForEach({ $e.Add($_) }); [LocalSTT]::LogErrors($e, $m)
     if ((Get-Variable 'VerbosePreference' -ValueOnly) -eq 'Continue') { ($r | Out-String) + ' ' | Write-Console -f DarkSlateGray }
     $config.HasRequirements = $1strun ? [LocalSTT]::ResolveRequirements($config.Stt.requirementsfile, $config, $false) : $false
     return $config
