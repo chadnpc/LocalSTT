@@ -46,17 +46,6 @@ class AudioRecorder {
     [LocalSTT]::data.IsRecording = $false
   }
 }
-
-class SttErrorLog : PSDataCollection[ErrorRecord] {
-  SttErrorLog() : base() {}
-  [void] Export([string]$jsonPath) {
-    $this | ConvertTo-Json -Depth 10 | Out-File -FilePath $jsonPath -Encoding UTF8
-  }
-  [string] ToString() {
-    return ($this.count -ge 0) ? ('@()') : ''
-  }
-}
-
 class PyenvHelper {
   PyenvHelper() {}
   static [void] useversion([string]$ver) {
@@ -89,9 +78,8 @@ class PyenvHelper {
 #   Ensure that audio devices are properly configured on the system for accurate results.
 # .LINK
 #   https://pyaudio.readthedocs.io/en/stable/
-class LocalSTT {
+class LocalSTT : ThreadRunner {
   static [AudioRecorder] $recorder
-  static [SttErrorLog] $ErrorLog = [SttErrorLog]::New()
   static [PsRecord]$data = [LocalSTT]::GetSttData()
   LocalSTT() {}
 
@@ -165,20 +153,8 @@ class LocalSTT {
     }
     $was_inactive = ($config.Env.State -eq "inactive") ? $([void]$config.Env.Activate(); $true) : $false
     $v ? $(Write-Console "(LocalSTT) " -f SlateBlue -NoNewLine; Write-Console "▶︎ Resolve requirements: " -f LemonChiffon -Animate) : $null
-    $s = [scriptblock]::Create("pip install -r '$req_txt'")
-    $j = [progressUtil]::WaitJob("(LocalSTT)   pip install -r $req_txt_short_path", $s);
-    $e = [PSDataCollection[ErrorRecord]]::new(); $j.Error.ForEach({ $e.Add($_) })
-    $r = $j | Receive-Job -ErrorVariable threadErrors; $j.Dispose()
-    (Get-Variable threadErrors).Value.ForEach({ $e.Add($_) });
-    [LocalSTT]::LogErrors($e, [ErrorMetadata]@{
-        Timestamp      = [DateTime]::Now
-        User           = $env:USER
-        Module         = "LocalSTT"
-        AdditionalInfo = "pip install -r '$req_txt'"
-      }, $throwOnFail)
-    $j.Dispose();
+    [void][LocalSTT]::Run("(LocalSTT)   pip install -r $req_txt_short_path", [scriptblock]::Create("pip install -r '$req_txt'"), $throwOnFail)
     if ($was_inactive) { $config.Env.Deactivate() }
-    if ($v) { $r | Out-String | Write-Console -f DarkSlateGray }
     return $res -and ([LocalSTT]::ErrorLog.count -eq 0)
   }
   static [bool] IsFirstRun() {
@@ -231,48 +207,17 @@ class LocalSTT {
       )
     }
     $config.Env = New-venv -Path $current_path -Verbose:$false
-    $m = "(LocalSTT)   Set local python version to $($config.PythonVersion)"
-    $j = [progressUtil]::WaitJob($m, { param($c) [PyenvHelper]::useversion($c.PythonVersion, $c) }, $config)
-    $e = [PSDataCollection[ErrorRecord]]::new(); $j.Error.ForEach({ $e.Add($_) })
-    $r = $j | Receive-Job -ErrorVariable threadErrors; $j.Dispose()
-    (Get-Variable threadErrors).Value.ForEach({ $e.Add($_) }); [LocalSTT]::LogErrors($e, $m)
-    if ((Get-Variable 'VerbosePreference' -ValueOnly) -eq 'Continue') { ($r | Out-String) + ' ' | Write-Console -f DarkSlateGray }
+    $cfactivity = "(LocalSTT)   Set local python version to {0}" -f $config.PythonVersion
+    [void][LocalSTT]::Run($cfactivity, { param($c) [PyenvHelper]::useversion($c.PythonVersion, $c) }, $cfactivity, $config)
     $config.HasRequirements = $1strun ? [LocalSTT]::ResolveRequirements($config.Stt.requirementsfile, $config, $false) : $false
     return $config
-  }
-  static hidden [void] LogErrors([PSDataCollection[ErrorRecord]]$err0r) {
-    [LocalSTT]::LogErrors($err0r, [string]::Empty)
-  }
-  static hidden [void] LogErrors([PSDataCollection[ErrorRecord]]$err0r, [string]$MoreInfo) {
-    [LocalSTT]::LogErrors($err0r, @{
-        Timestamp      = [DateTime]::Now
-        User           = $env:USER
-        Module         = "LocalSTT"
-        AdditionalInfo = $MoreInfo
-      }
-    )
-  }
-  static hidden [void] LogErrors([PSDataCollection[ErrorRecord]]$err0r, [ErrorMetadata]$metadata) {
-    [LocalSTT]::LogErrors($err0r, $metadata, $false)
-  }
-  static hidden [void] LogErrors([PSDataCollection[ErrorRecord]]$err0r, [ErrorMetadata]$metadata, [bool]$throw) {
-    if ($err0r.count -eq 0) { return } # log/record the error
-    ![LocalSTT]::ErrorLog ? ([LocalSTT]::ErrorLog = [SttErrorLog]::New()) : $null;
-    $err0r.ForEach({
-        $metadata.IsPrinted = !$throw
-        $_.PsObject.Properties.Add([psnoteproperty]::New("Metadata", $metadata))
-        [void][LocalSTT]::ErrorLog.Add($_)
-      }
-    )
-    # "simple printf" or Write-TerminatingError
-    $throw ? (throw $err0r) : $($err0r | Out-String | Write-Console -f LightCoral)
   }
 }
 
 #endregion Classes
 # Types that will be available to users when they import the module.
 $typestoExport = @(
-  [LocalSTT], [SttErrorLog], [AudioRecorder], [PyenvHelper]
+  [LocalSTT], [AudioRecorder], [PyenvHelper]
 )
 $TypeAcceleratorsClass = [PsObject].Assembly.GetType('System.Management.Automation.TypeAccelerators')
 foreach ($Type in $typestoExport) {
