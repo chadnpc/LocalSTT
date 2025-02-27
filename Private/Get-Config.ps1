@@ -8,12 +8,12 @@
   )
 
   begin {
+    $config = $null
     $1strun = IsFirstRun;
     $mdpath = (Get-Module LocalSTT -ListAvailable -Verbose:$false).ModuleBase
   }
 
   process {
-    $config = $null
     try {
       $config = [PsRecord]@{
         Env             = $null
