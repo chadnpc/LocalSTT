@@ -410,3 +410,5 @@ Tests/LocalSTT.Features.Tests.ps1
 Tests/LocalSTT.Intergration.Tests.ps1
 Tests/Resources/Test-GitHubScript.ps1
 .env
+Pipfile.lock
+Pipfile
