@@ -93,9 +93,7 @@ class LocalSTT : ThreadRunner {
   static [IO.Fileinfo] RecordAudio([string]$outFile, [Timespan]$duration) {
     [ValidateNotNullOrWhiteSpace()][string]$outFile = $outFile
     if (IsFirstRun) { [void](Resolve-Requirements) };
-    if ([LocalSTT]::data.Env.State -eq "inactive") {
-      [LocalSTT]::data.Env.Activate()
-    }
+    if ([LocalSTT]::data.Env.State -eq "inactive") { [LocalSTT]::data.Env.Activate() }
     $_c = [LocalSTT].config; [LocalSTT]::recorder = [AudioRecorder]::New([TcpListener]::new([IPEndpoint]::new([IPAddress]$_c.Server.host, $_c.Server.port)), [IO.FileInfo]::New($outFile)); $dir = $_c.Server.workingDirectory
     [LocalSTT]::data.Process = Start-Process -FilePath "python" -ArgumentList "$($_c.Server.Script) --host `"$($_c.Server.host)`" --port $($_c.Server.port) --amplify-rate $($_c.Server.amplifyRate) --outfile `"$outFile`" --duration-in-minutes=$($duration.TotalMinutes) --working-directory `"$dir`"" -WorkingDirectory $dir -PassThru -NoNewWindow
     Write-Console "(LocalSTT) " -f SlateBlue -NoNewLine; Write-Console "▶︎ Recording server starting @ http://$([LocalSTT]::recorder.listener.LocalEndpoint) PID: $([LocalSTT]::data.Process.Id)" -f LemonChiffon;
