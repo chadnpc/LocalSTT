@@ -22,15 +22,18 @@ Install-Module LocalSTT
 ```PowerShell
 Import-Module LocalSTT
 
-Record-Audio -o output.wav
+Record-Audio -o output.wav # works fine
 
-Transcribe-Audio output.wav
+# Transcribe-Audio output.wav ## !? https://github.com/OpenNMT/CTranslate2/pull/1852
 ```
 
 
-## NOTES
+## STATUS
 
+- Record-Audio works
 - currently Works with Python <= 3.12 : [faster-whisper/issues/1238](https://github.com/SYSTRAN/faster-whisper/issues/1238)
+
+- Transcribe-Audio with ctranslate2 is not working : [OpenNMT/CTranslate2/pull/1852](https://github.com/OpenNMT/CTranslate2/pull/1852)
 
 ## [🧾 License](LICENSE)
 
