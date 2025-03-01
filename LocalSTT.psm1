@@ -78,8 +78,8 @@ class PyenvHelper {
 # .LINK
 #   https://pyaudio.readthedocs.io/en/stable/
 class LocalSTT : ThreadRunner {
-  static [AudioRecorder] $recorder
   static [PsRecord]$data = (Get-Config)
+  static [ValidateNotNull()][AudioRecorder]$recorder
   LocalSTT() {}
 
   static [IO.Fileinfo] RecordAudio() { return [LocalSTT]::RecordAudio(3) }
@@ -92,10 +92,10 @@ class LocalSTT : ThreadRunner {
   }
   static [IO.Fileinfo] RecordAudio([string]$outFile, [Timespan]$duration) {
     [ValidateNotNullOrWhiteSpace()][string]$outFile = $outFile
-    if (IsFirstRun) { [void](Resolve-Requirements) };
-    if ([LocalSTT]::data.Env.State -eq "inactive") { [LocalSTT]::data.Env.Activate() }
+    Resolve-Requirements ([ref][LocalSTT]::data) -ea stop -Verbose:$false
+    $py = [IO.FileInfo][IO.Path]::Combine((Get-Variable HOME -Scope Global -ValueOnly), ".pyenv", "shims", "python")
     $_c = [LocalSTT].config; [LocalSTT]::recorder = [AudioRecorder]::New([TcpListener]::new([IPEndpoint]::new([IPAddress]$_c.Server.host, $_c.Server.port)), [IO.FileInfo]::New($outFile)); $dir = $_c.Server.workingDirectory
-    [LocalSTT]::data.Process = Start-Process -FilePath "python" -ArgumentList "$($_c.Server.Script) --host `"$($_c.Server.host)`" --port $($_c.Server.port) --amplify-rate $($_c.Server.amplifyRate) --outfile `"$outFile`" --duration-in-minutes=$($duration.TotalMinutes) --working-directory `"$dir`"" -WorkingDirectory $dir -PassThru -NoNewWindow
+    [LocalSTT]::data.Process = Start-Process -FilePath "$py" -ArgumentList "$($_c.Server.Script) --host `"$($_c.Server.host)`" --port $($_c.Server.port) --amplify-rate $($_c.Server.amplifyRate) --outfile `"$outFile`" --duration-in-minutes=$($duration.TotalMinutes) --working-directory `"$dir`"" -WorkingDirectory $dir -PassThru -NoNewWindow
     Write-Console "(LocalSTT) " -f SlateBlue -NoNewLine; Write-Console "▶︎ Recording server starting @ http://$([LocalSTT]::recorder.listener.LocalEndpoint) PID: $([LocalSTT]::data.Process.Id)" -f LemonChiffon;
     $OgctrInput = [Console]::TreatControlCAsInput;
     try {
@@ -123,13 +123,10 @@ class LocalSTT : ThreadRunner {
     [ValidateNotNullOrEmpty()][IO.FileInfo]$InputAudio = $InputAudio;
     [string]$inputFile = $InputAudio.FullName;
     if (!$InputAudio.Exists) { throw [FileNotFoundException]::New("Could Not Find Audio File $inputFile") }
-    if (IsFirstRun) { [void](Resolve-Requirements) }
-    if ([LocalSTT]::data.Env.State -eq "inactive") {
-      [LocalSTT]::data.Env.Activate()
-    }
-    $_c = [LocalSTT].config;
+    Resolve-Requirements ([ref][LocalSTT]::data) -ea stop -Verbose:$false
+    $_c = [LocalSTT].config; $py = [IO.FileInfo][IO.Path]::Combine((Get-Variable HOME -Scope Global -ValueOnly), ".pyenv", "shims", "python")
     $_t = [IO.Path]::Combine(($_c.Server.Script | Split-Path), "transcribe.py"); $dir = $_c.Server.workingDirectory
-    $Process = Start-Process -FilePath "python" -ArgumentList "$_t --inputfile `"$inputFile`" --outfile `"$outFile`" --working-directory `"$dir`"" -WorkingDirectory $dir -PassThru -NoNewWindow;
+    $Process = Start-Process -FilePath "$py" -ArgumentList "$_t --inputfile `"$inputFile`" --outfile `"$outFile`" --working-directory `"$dir`"" -WorkingDirectory $dir -PassThru -NoNewWindow;
     $Process.WaitForExit()
     $process.Kill(); $Process.Dispose()
     return [IO.File]::ReadAllText($outFile)
