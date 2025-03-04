@@ -79,6 +79,7 @@ class PyenvHelper {
 #   https://pyaudio.readthedocs.io/en/stable/
 class LocalSTT : ThreadRunner {
   static [PsRecord]$data = (Get-Config)
+  static [cliart]$banner = "H4sIAAAAAAAAA+2YS4/aMBRGf1AWWcydyaoLaloeF8lIRerAbiIF53qmOAaSVv31lXEYHMchLCoBEoujQHL9iMT5bAOaDeDBf4WVKARvQYKjVBxFwVHmHPOCY26ugdoHPoMtqcmwSbIghU8WiEk9p/b6VvOStts8cBig99tVoPkaNE9B8z1o/gM024Dmr6BHc9B8bD+z79d27I78p5KjrCKU7yXK9wjFPsJ8G2GeRyg/LLm5J7Ib8Oxe/C+G1vFZQmqV2gx4XpN6eyK1MldDTGo5uwHP7sb/36B5DJrtLdw4/9NeR5WFV6DZt2s7dif+046j0Nx6XnVQ2AwQeYZ5Ht47PHD930pLEvezfCW1XN+Aa7fuP4LF+N/HaGy5vmu37n/prP89mP2A4bOt4ijNWaE+J5w7UxzrDueKQJ0UTs25OnM+Cd0v+ufSNS+/vY/pz33XEE3/p5LUMiW1rc67n8ak9JjUxPHfzQ0/F5Q5U/zt7u94ntCmLmk/X8WkJuNmn8mwbhvIoEZO9WSUOeu49X77Vu6t+zOyvf7/AT0ya/sKNEtAs9hhDZrNQKOpy5rt3Nzwc+GSTDFteOR8n4NmX0GzSdsvXu9RPtl4z71+uzzl7pzjerwL3yk0VtD/T35lKHYlUu3ewUdl/wMQHyUKOnnvZkdjj+D6d0GmCBEhldnp3r7uY990WO46+ipOc2rtV0LuVuUpyw7jZ2ffyc26RtY03sFd/42fMCT1srAcnEi7Mb4ea2FBaun5nwT8m25IzQLPp8aXuZNBG1LbQN5MzNg9bh6z4FJ3zXwO43vZckmmhbLmtP5/+Qcw8c7nABQAAA=="
   static [ValidateNotNull()][AudioRecorder]$recorder
   LocalSTT() {}
 
