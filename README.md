@@ -1,6 +1,7 @@
-﻿# [LocalStt ၊▹](https://www.powershellgallery.com/packages/LocalSTT)
 
-A module for speech to text & transcription stuff.
+ # [![Image](https://github.com/user-attachments/assets/02f75c8c-77d8-40a2-923d-28e2437091d9)](https://www.powershellgallery.com/packages/LocalSTT)
+
+Speech to text & transcription module.
 
 Core modules:
 
