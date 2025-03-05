@@ -98,7 +98,7 @@ class LocalSTT : ThreadRunner {
     $_c = [LocalSTT].config; [LocalSTT]::recorder = [AudioRecorder]::New([TcpListener]::new([IPEndpoint]::new([IPAddress]$_c.Server.host, $_c.Server.port)), [IO.FileInfo]::New($outFile)); $dir = $_c.Server.workingDirectory
     [LocalSTT]::data.Process = Start-Process -FilePath "$py" -ArgumentList "$($_c.Server.Script) --host `"$($_c.Server.host)`" --port $($_c.Server.port) --amplify-rate $($_c.Server.amplifyRate) --outfile `"$outFile`" --duration-in-minutes=$($duration.TotalMinutes) --working-directory `"$dir`"" -WorkingDirectory $dir -PassThru -NoNewWindow
     Write-Console "(LocalSTT) " -f SlateBlue -NoNewLine; Write-Console "▶︎ Recording server starting @ http://$([LocalSTT]::recorder.listener.LocalEndpoint) PID: $([LocalSTT]::data.Process.Id)" -f LemonChiffon;
-    $OgctrInput = [Console]::TreatControlCAsInput;
+    $OgctrInput = [Console]::TreatControlCAsInput; $ogProgressPreference = [ProgressUtil]::data.ShowProgress; [ProgressUtil]::data.Set("ShowProgress", $true)
     try {
       $stream = [LocalSTT]::recorder.Start(); $buffer = [byte[]]::new(1024); [LocalSTT]::data.PercentComplete = 0;
       do {
@@ -115,6 +115,7 @@ class LocalSTT : ThreadRunner {
     } catch {
       Write-Console "`nError receiving data: $($_.Exception.Message)" -f LightCoral
     } finally {
+      [ProgressUtil]::data.Set("ShowProgress", $ogProgressPreference)
       [Console]::TreatControlCAsInput = $OgctrInput
       [LocalSTT]::recorder.Stop([LocalSTT]::data.Process.Id)
     }

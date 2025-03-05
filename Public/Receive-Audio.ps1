@@ -38,6 +38,7 @@ function Receive-Audio {
   begin {
     $params = $PSCmdlet.MyInvocation.BoundParameters
     $_ofile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutFile)
+    [ProgressUtil]::data.Set("ShowProgress", [bool]$verbose)
   }
   process {
     $rec = $params.ContainsKey('OutFile') ? ([LocalSTT]::RecordAudio($_ofile, $Duration)) : ([LocalSTT]::RecordAudio($Duration))

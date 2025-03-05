@@ -33,6 +33,7 @@
   begin {
     $p = $PSCmdlet.MyInvocation.BoundParameters; $t = [string]::Empty
     $o = $p.ContainsKey('OutFile') ? $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutFile) : ([IO.Path]::GetTempFileName())
+    [ProgressUtil]::data.Set("ShowProgress", [bool]$verbose)
   }
   process {
     $t = [LocalSTT]::TranscribeAudio($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path), $o)

@@ -148,7 +148,7 @@ def audio_recording_loop():
   except socket.error as e:
     print(f"Socket error occurred: {e}")
   except Exception as e:
-    print(f"Error during audio recording: {e}")
+    print(f"Audio recording halted: {e}")
   finally:
     stream.stop_stream()
     stream.close()
@@ -184,7 +184,7 @@ def send_progress_over_socket(progress_object):
         except BrokenPipeError:
             stop_event.set()
             if progress_object["process"] != "done":
-              raise Exception("\nSocket connection broken.")
+              raise Exception(" Connection closed.")
             else:
               print("\ndone. Socket connection closed.")
         except Exception as e:
