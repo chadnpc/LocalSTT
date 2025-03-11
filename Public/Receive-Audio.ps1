@@ -2,7 +2,7 @@ function Receive-Audio {
   # .SYNOPSIS
   #   Records audio
   # .DESCRIPTION
-  #   Records audio from the default microphone and saves it to a file.
+  #   Records audio from the default microphone 🎙️ and saves it to a file.
   # .LINK
   #   https://github.com/chadnpc/LocalSTT/blob/main/Public/Receive-Audio.ps1
   # .EXAMPLE
