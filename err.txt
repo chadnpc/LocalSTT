@@ -1,0 +1,55 @@
+Record-Audio -o output.wav
+[venv] Creating virtual env for 'C:\Users\cnpc' ... WARNING: [!]  No RegistryKeyReadWrite Permission.
+System.InvalidOperationException: Failed to create a venv Object
+ ---> System.Management.Automation.MethodInvocationException: Exception calling "Invoke" with "0" argument(s): "Exception calling "SetValue" with "3" argument(s): "Cannot write to the registry key.""
+ ---> System.Management.Automation.CmdletInvocationException: Exception calling "SetValue" with "3" argument(s): "Cannot write to the registry key."
+ ---> System.Management.Automation.MethodInvocationException: Exception calling "SetValue" with "3" argument(s): "Cannot write to the registry key."
+ ---> System.UnauthorizedAccessException: Cannot write to the registry key.
+   at Microsoft.Win32.RegistryKey.EnsureWriteable()
+   at Microsoft.Win32.RegistryKey.SetValue(String name, Object value, RegistryValueKind valueKind)
+   at CallSite.Target(Closure, CallSite, RegistryKey, String, Object, Object)
+   --- End of inner exception stack trace ---
+   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.Interpreter.Run(InterpretedFrame frame)
+   at System.Management.Automation.PSScriptCmdlet.RunClause(Action`1 clause, Object dollarUnderbar, Object inputToProcess)
+   at System.Management.Automation.PSScriptCmdlet.DoProcessRecord()
+   at System.Management.Automation.CommandProcessor.ProcessRecord()
+   --- End of inner exception stack trace ---
+   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.Interpreter.Run(InterpretedFrame frame)
+   at System.Management.Automation.ScriptBlock.InvokeWithPipeImpl(ScriptBlockClauseToInvoke clauseToInvoke, Boolean createLocalScope, Dictionary`2 functionsToDefine, List`1 variablesToDefine, ErrorHandlingBehavior errorHandlingBehavior, Object dollarUnder, Object input, Object scriptThis, Pipe outputPipe, InvocationInfo invocationInfo, Object[] args)
+   at System.Management.Automation.ScriptBlock.InvokeWithPipe(Boolean useLocalScope, ErrorHandlingBehavior errorHandlingBehavior, Object dollarUnder, Object input, Object scriptThis, Pipe outputPipe, InvocationInfo invocationInfo, Boolean propagateAllExceptionsToTop, List`1 variablesToDefine, Dictionary`2 functionsToDefine, Object[] args)
+   at CallSite.Target(Closure, CallSite, Object)
+   --- End of inner exception stack trace ---
+   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   at System.Management.Automation.Interpreter.Interpreter.Run(InterpretedFrame frame)
+   at System.Management.Automation.PSScriptCmdlet.RunClause(Action`1 clause, Object dollarUnderbar, Object inputToProcess)
+   at System.Management.Automation.PSScriptCmdlet.DoProcessRecord()
+   at System.Management.Automation.CommandProcessor.ProcessRecord()
+   --- End of inner exception stack trace ---
+Failed to Load stt data
+
+PSMessageDetails      :
+Exception             : System.Management.Automation.RuntimeException: ScriptHalted
+TargetObject          :
+CategoryInfo          : OperationStopped: (:) [], RuntimeException
+FullyQualifiedErrorId : ScriptHalted
+ErrorDetails          :
+InvocationInfo        : System.Management.Automation.InvocationInfo
+ScriptStackTrace      : at Create, C:\Users\cnpc\Documents\PowerShell\Modules\pipEnv\0.1.8\pipEnv.psm1: line 231
+                        at Create, C:\Users\cnpc\Documents\PowerShell\Modules\pipEnv\0.1.8\pipEnv.psm1: line 202
+                        at New-venv<Process>, C:\Users\cnpc\Documents\PowerShell\Modules\pipEnv\0.1.8\Public\New-venv.ps1: line 37
+                        at Get-Config<Process>, C:\Users\cnpc\Documents\PowerShell\Modules\LocalSTT\0.1.4\Private\Get-Config.ps1: line 49
+                        at <ScriptBlock>, C:\Users\cnpc\Documents\PowerShell\Modules\LocalSTT\0.1.4\LocalSTT.psm1: line 81
+                        at Receive-Audio<Process>, C:\Users\cnpc\Documents\PowerShell\Modules\LocalSTT\0.1.4\Public\Receive-Audio.ps1: line 43
+                        at <ScriptBlock>, <No file>: line 1
+PipelineIterationInfo : {}
